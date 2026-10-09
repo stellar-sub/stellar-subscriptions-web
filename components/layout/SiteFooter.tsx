@@ -5,7 +5,7 @@ import { contractsFor } from "@/lib/contracts";
 import { shortAddress } from "@/lib/format";
 import { NETWORKS, explorerContractUrl } from "@/lib/stellar";
 
-const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG;
+const ORG = process.env.NEXT_PUBLIC_GITHUB_ORG ?? "stellar-sub";
 const REPOS = [
   { name: "stellar-subscriptions-contracts", label: "Contracts" },
   { name: "stellar-subscriptions-api-docs", label: "API + Docs" },
