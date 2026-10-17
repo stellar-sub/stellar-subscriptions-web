@@ -3,11 +3,14 @@ import {
   capPercent,
   describeInterval,
   formatAmount,
+  formatAmountWithSymbol,
   formatLedgers,
   maxCharges,
   parseAmount,
   pluralize,
+  rawAmount,
   shortAddress,
+  toUtcDay,
   unchargeableRemainder,
 } from "./format";
 
@@ -88,6 +91,37 @@ describe("ledger time", () => {
   it("formats ledger counts", () => {
     expect(formatLedgers(17_280)).toBe("17,280 ledgers");
     expect(formatLedgers(1)).toBe("1 ledger");
+  });
+});
+
+describe("exact amount helpers", () => {
+  it("returns raw units as an exact string, never rounded", () => {
+    expect(rawAmount(123_456_789_012_345_678_901_234_567n)).toBe(
+      "123456789012345678901234567",
+    );
+    expect(rawAmount(0n)).toBe("0");
+    expect(rawAmount(-42n)).toBe("-42");
+  });
+
+  it("formats an amount with its symbol and decimals", () => {
+    expect(formatAmountWithSymbol(12_500_000n, 7, "USDC")).toBe("1.25 USDC");
+    expect(formatAmountWithSymbol(10_000_000n, 7, "XLM")).toBe("1 XLM");
+  });
+
+  it("formats two tokens independently and never adds them", () => {
+    const usdc = formatAmountWithSymbol(12_500_000n, 7, "USDC");
+    const xlm = formatAmountWithSymbol(30_000_000n, 7, "XLM");
+    expect(usdc).toBe("1.25 USDC");
+    expect(xlm).toBe("3 XLM");
+    expect(usdc).not.toContain("XLM");
+    expect(xlm).not.toContain("USDC");
+  });
+
+  it("buckets timestamps by UTC day", () => {
+    expect(toUtcDay(0)).toBe("1970-01-01");
+    expect(toUtcDay(1_700_000_000)).toBe("2023-11-14");
+    expect(toUtcDay(1_700_000_000)).toBe(toUtcDay(1_700_086_399));
+    expect(toUtcDay(1_700_086_400)).toBe("2023-11-15");
   });
 });
 

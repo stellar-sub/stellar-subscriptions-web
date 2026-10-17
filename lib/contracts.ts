@@ -9,6 +9,7 @@
 import { Asset, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   ContractError,
+  LEDGER_SECONDS,
   NETWORKS,
   arg,
   getEventWindow,
@@ -493,15 +494,25 @@ export function decodeChargeEvent(event: rpc.Api.EventResponse): ChargeEvent {
   };
 }
 
+/** The result of {@link getChargeEvents}: recent history plus where it starts. */
+export interface ChargeEventsResult {
+  events: ChargeEvent[];
+  /** The first ledger the RPC node's event window covers. */
+  fromLedger: number;
+  /** The latest ledger the node reported when the walk finished. */
+  latestLedger: number;
+}
+
 /**
  * Every `charged` event paid to `merchant` that the RPC node still holds.
  * RPC nodes keep a limited window of recent ledgers, so this is recent
  * history, not all-time history; `fromLedger` says where the window starts.
+ * Older history needs an indexer.
  */
 export async function getChargeEvents(
   network: Network,
   merchant: string,
-): Promise<{ events: ChargeEvent[]; fromLedger: number }> {
+): Promise<ChargeEventsResult> {
   const server = getServer(network);
   const { oldest } = await getEventWindow(network);
   const filters: rpc.Api.EventFilter[] = [
@@ -528,7 +539,21 @@ export async function getChargeEvents(
     page = await server.getEvents({ cursor: page.cursor, filters, limit: PAGE_SIZE });
     events.push(...page.events.map(decodeChargeEvent));
   }
-  return { events, fromLedger };
+  return { events, fromLedger, latestLedger: page.latestLedger };
+}
+
+/**
+ * An *estimate* of when `ledger` closed, derived from the latest ledger's
+ * close time and the average ledger interval. Ledgers can close faster or
+ * slower than the average, so callers must label this as approximate.
+ */
+export function estimateLedgerDate(
+  ledger: number,
+  latestLedger: number,
+  latestClosedAt: Date,
+): Date {
+  const behind = Math.max(0, latestLedger - ledger);
+  return new Date(latestClosedAt.getTime() - behind * LEDGER_SECONDS * 1000);
 }
 
 /** Re-exported so callers can tell a contract rejection from other failures. */

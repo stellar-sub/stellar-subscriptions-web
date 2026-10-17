@@ -47,6 +47,41 @@ export function formatToken(value: bigint, symbol: string, decimals: number): st
 }
 
 /**
+ * The exact raw-unit integer as a string, with no grouping and no float math:
+ * `rawAmount(12_500_000n)` → `"12500000"`. Use this for CSV exports so the
+ * value a spreadsheet sees is exactly the on-chain amount.
+ */
+export function rawAmount(value: bigint): string {
+  return value.toString();
+}
+
+/**
+ * An amount with its token symbol and decimals for display, keeping every
+ * fraction digit the token has (no trimming): `formatTokenExact(12_500_000n,
+ * "USDC", 7)` → `"1.2500000 USDC"`. Amounts in different tokens are never
+ * combined; call this once per token.
+ */
+export function formatTokenExact(value: bigint, symbol: string, decimals: number): string {
+  const negative = value < 0n;
+  const abs = negative ? -value : value;
+  const scale = pow10(decimals);
+  const whole = (abs / scale).toLocaleString("en-US");
+  const fraction = (abs % scale).toString().padStart(decimals, "0");
+  return `${negative ? "-" : ""}${whole}${decimals > 0 ? `.${fraction}` : ""} ${symbol}`;
+}
+
+/**
+ * A UTC day bucket key, `YYYY-MM-DD`, from a `Date`. Buckets are UTC so the
+ * same event always lands in the same day regardless of the viewer's zone.
+ */
+export function dayKey(date: Date): string {
+  const year = date.getUTCFullYear().toString().padStart(4, "0");
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, "0");
+  const day = date.getUTCDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * A user-typed decimal amount to raw units. Returns null for anything that is
  * not a positive number with at most `decimals` fraction digits.
  */
