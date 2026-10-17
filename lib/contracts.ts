@@ -445,6 +445,62 @@ export async function createPlan(ctx: WriteCtx, input: CreatePlanInput): Promise
   return { ...result, id: toNumber(result.returnValue) };
 }
 
+// ---- plan input validation ----
+
+/** The contract's maximum plan name length, in UTF-8 bytes. */
+export const PLAN_NAME_MAX_BYTES = 64;
+
+export interface PlanInputErrors {
+  name?: string;
+  token?: string;
+  amountPerPeriod?: string;
+  intervalLedgers?: string;
+  defaultCap?: string;
+}
+
+/** UTF-8 byte length of a string, which is what the contract measures. */
+export function utf8ByteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/**
+ * Check plan input against every rule the plan contract enforces, so the form
+ * can show live errors and an invalid plan never reaches the wallet. Messages
+ * match PLAN_ERRORS. Returns an object with one entry per invalid field; an
+ * empty object means the input is valid.
+ */
+export function validatePlanInput(input: CreatePlanInput): PlanInputErrors {
+  const errors: PlanInputErrors = {};
+
+  const nameBytes = utf8ByteLength(input.name);
+  if (nameBytes < 1 || nameBytes > PLAN_NAME_MAX_BYTES) {
+    errors.name = PLAN_ERRORS[4];
+  }
+
+  if (!input.token) {
+    errors.token = "Choose the token subscribers will pay in.";
+  }
+
+  if (input.amountPerPeriod <= 0n) {
+    errors.amountPerPeriod = PLAN_ERRORS[5];
+  }
+
+  if (!Number.isInteger(input.intervalLedgers) || input.intervalLedgers < 1) {
+    errors.intervalLedgers = PLAN_ERRORS[6];
+  }
+
+  if (input.defaultCap < input.amountPerPeriod || input.defaultCap <= 0n) {
+    errors.defaultCap = PLAN_ERRORS[7];
+  }
+
+  return errors;
+}
+
+/** True when `validatePlanInput` reports no errors. */
+export function isPlanInputValid(input: CreatePlanInput): boolean {
+  return Object.keys(validatePlanInput(input)).length === 0;
+}
+
 export function deactivatePlan(ctx: WriteCtx, planId: number): Promise<TxResult> {
   return invokeContract(
     ctx,

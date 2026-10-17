@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { TokenAmount } from "@/components/ui/TokenAmount";
 import { PlanBadge } from "@/components/plan/PlanBadge";
+import { PlanShare } from "@/components/plan/PlanShare";
 import { SubscribeForm } from "@/components/subscribe/SubscribeForm";
 
 export default function PlanDetailPage({ params }: { params: { id: string } }) {
@@ -84,6 +85,8 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
             The merchant can charge at most once per interval and never more than the cap you choose. You can pause
             or cancel from My subscriptions whenever you like.
           </p>
+
+          <PlanShare planId={p.id} planName={p.name} />
         </section>
 
         <aside className="space-y-4">
