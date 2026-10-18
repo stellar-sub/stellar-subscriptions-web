@@ -44,6 +44,35 @@ export function SubscriptionCard({ sub, onChanged }: { sub: Subscription; onChan
       <CapProgress sub={sub} />
       <NextChargeCountdown sub={sub} />
 
+      {/* What happens next explanation based on status */}
+      <div className="rounded-lg border border-line bg-raised px-3 py-2 text-sm text-muted">
+        {sub.status === "active" && "The merchant can charge once per interval, up to your cap."}
+        {sub.status === "paused" && "No charges can happen until you resume."}
+        {sub.status === "cancelled" && "Final. No further charges can ever happen."}
+        {sub.status === "exhausted" && "The full cap has been charged. No further charges are possible."}
+      </div>
+
+      {/* Links to explorer and contract events */}
+      <div className="flex flex-wrap gap-2 text-sm">
+        <a
+          href={`https://stellar.expert/explorer/testnet/contract/${sub.contractId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link hover:underline"
+        >
+          View on Explorer ↗
+        </a>
+        <span className="text-muted">·</span>
+        <a
+          href={`https://stellar.expert/explorer/testnet/contract/${sub.contractId}/events?search=subscription_${sub.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-link hover:underline"
+        >
+          View Events ↗
+        </a>
+      </div>
+
       <footer className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
         <PauseResumeButton sub={sub} onDone={onChanged} />
         <CancelButton sub={sub} onDone={onChanged} />
