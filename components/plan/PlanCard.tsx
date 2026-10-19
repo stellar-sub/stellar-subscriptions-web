@@ -11,7 +11,9 @@ export function PlanCard({ plan }: { plan: Plan }) {
       className="card group flex flex-col gap-4 p-5 transition hover:border-brand/50"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-fg group-hover:text-brand">{plan.name}</h3>
+        <h3 className="min-w-0 truncate font-semibold text-fg group-hover:text-brand" title={plan.name}>
+          {plan.name}
+        </h3>
         <PlanBadge active={plan.active} />
       </div>
       <p className="text-2xl font-semibold text-fg">

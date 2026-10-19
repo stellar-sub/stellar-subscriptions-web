@@ -33,7 +33,7 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
         <section className="space-y-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold text-fg">{p.name}</h1>
+              <h1 className="min-w-0 break-words text-3xl font-semibold text-fg">{p.name}</h1>
               <PlanBadge active={p.active} />
             </div>
             <p className="text-sm text-muted">
