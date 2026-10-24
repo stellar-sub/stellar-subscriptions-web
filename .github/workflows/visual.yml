@@ -1,0 +1,54 @@
+name: Visual regression
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      update:
+        description: Re-render the baselines and upload them as an artifact instead of comparing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  visual:
+    runs-on: ubuntu-latest
+    # The image carries the browser and fonts the baselines were rendered with.
+    # Keep its tag equal to the exact @playwright/test version in package.json.
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - run: npm ci
+
+      - name: Compare screenshots with the baselines
+        if: ${{ !inputs.update }}
+        run: npx playwright test
+
+      - name: Re-render the baselines
+        if: ${{ inputs.update }}
+        run: npx playwright test --update-snapshots
+
+      - name: Upload the new baselines
+        if: ${{ inputs.update }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-baselines
+          path: e2e/__snapshots__/
+          if-no-files-found: error
+
+      - name: Upload the report with the expected, actual and diff images
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: visual-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
