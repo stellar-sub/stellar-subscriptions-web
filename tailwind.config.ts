@@ -28,6 +28,10 @@ const config: Config = {
       maxWidth: {
         page: "72rem",
       },
+      screens: {
+        // Breakpoint below which merchant tables collapse into stacked cards.
+        card: "48rem",
+      },
     },
   },
   plugins: [],

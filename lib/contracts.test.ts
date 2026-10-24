@@ -6,9 +6,27 @@ import {
   decodePlan,
   decodeStats,
   decodeSubscription,
+  getChargeEvents,
   toNumber,
 } from "./contracts";
 import { SubStatus } from "@/types";
+
+const mockGetEvents = jest.fn();
+const mockGetHealth = jest.fn();
+
+jest.mock("@stellar/stellar-sdk", () => {
+  const actual = jest.requireActual("@stellar/stellar-sdk");
+  return {
+    ...actual,
+    rpc: {
+      ...actual.rpc,
+      Server: jest.fn().mockImplementation(() => ({
+        getEvents: mockGetEvents,
+        getHealth: mockGetHealth,
+      })),
+    },
+  };
+});
 
 describe("event paging", () => {
   it("reads the ledger a cursor points at", () => {
@@ -120,5 +138,103 @@ describe("deployments", () => {
   it("has Testnet contracts and no Mainnet deployment by default", () => {
     expect(contractsFor("testnet")?.subscription).toMatch(/^C[A-Z0-9]{55}$/);
     expect(contractsFor("mainnet")).toBeNull();
+  });
+});
+
+const USDC = "CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXSTZLEO7SJMI75";
+
+function chargedEvent(opts: {
+  id: string;
+  ledger: number;
+  subscriber?: string;
+  token?: string;
+  amount: bigint;
+}) {
+  return {
+    id: opts.id,
+    type: "contract",
+    ledger: opts.ledger,
+    ledgerClosedAt: new Date(Date.UTC(2025, 0, 1)).toISOString(),
+    contractId: "CSUBSCRIPTION",
+    topic: [
+      { value: () => "charged" },
+      { value: () => opts.subscriber ?? SUBSCRIBER },
+    ],
+    value: {
+      value: () => ({
+        amount: opts.amount,
+        token: opts.token ?? XLM,
+      }),
+    },
+    txHash: "abc",
+    pagingToken: opts.id,
+  };
+}
+
+describe("getChargeEvents", () => {
+  beforeEach(() => {
+    mockGetEvents.mockReset();
+    mockGetHealth.mockReset();
+    mockGetHealth.mockResolvedValue({ oldestLedger: 4_000_000 });
+  });
+
+  it("decodes charged events and reports where history starts", async () => {
+    mockGetEvents.mockResolvedValueOnce({
+      events: [
+        chargedEvent({ id: "1-1", ledger: 4_100_000, amount: 10_000_000n }),
+        chargedEvent({ id: "1-2", ledger: 4_100_100, amount: 5_000_000n }),
+      ],
+      cursor: "1-2",
+    });
+
+    const result = await getChargeEvents({ merchant: MERCHANT, network: "testnet" });
+
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0]).toMatchObject({
+      subscriber: SUBSCRIBER,
+      token: XLM,
+      amount: 10_000_000n,
+      ledger: 4_100_000,
+    });
+    expect(result.events[1].amount).toBe(5_000_000n);
+    // fromLedger is the node's oldest ledger plus a safety margin.
+    expect(result.fromLedger).toBeGreaterThan(4_000_000);
+    expect(result.fromLedger).toBeLessThanOrEqual(4_100_000);
+  });
+
+  it("follows the cursor across pages", async () => {
+    mockGetEvents
+      .mockResolvedValueOnce({
+        events: [chargedEvent({ id: "1-1", ledger: 4_100_000, amount: 1n })],
+        cursor: "1-1",
+      })
+      .mockResolvedValueOnce({
+        events: [chargedEvent({ id: "1-2", ledger: 4_100_100, amount: 2n })],
+        cursor: "1-2",
+      })
+      .mockResolvedValueOnce({ events: [], cursor: "1-2" });
+
+    const result = await getChargeEvents({ merchant: MERCHANT, network: "testnet" });
+
+    expect(result.events.map((e) => e.amount)).toEqual([1n, 2n]);
+    expect(mockGetEvents.mock.calls[1][0].cursor).toBe("1-1");
+  });
+
+  it("keeps events for different tokens separate", async () => {
+    mockGetEvents.mockResolvedValueOnce({
+      events: [
+        chargedEvent({ id: "1-1", ledger: 4_100_000, token: XLM, amount: 10_000_000n }),
+        chargedEvent({ id: "1-2", ledger: 4_100_100, token: USDC, amount: 3_000_000n }),
+      ],
+      cursor: "1-2",
+    });
+
+    const result = await getChargeEvents({ merchant: MERCHANT, network: "testnet" });
+
+    expect(result.events).toHaveLength(2);
+    expect(result.events[0].token).toBe(XLM);
+    expect(result.events[1].token).toBe(USDC);
+    expect(result.events[0].amount).toBe(10_000_000n);
+    expect(result.events[1].amount).toBe(3_000_000n);
   });
 });

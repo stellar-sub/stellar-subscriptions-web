@@ -48,8 +48,7 @@ export function useAsync<T>(load: (() => Promise<T>) | null, deps: readonly unkn
     return () => {
       current = false;
     };
-    // `load` is recreated every render; `deps` says when it actually changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` is recreated every render; `deps` says when it actually changes.
   }, [...deps, generation, load === null]);
 
   return { data, error, loading, reload };

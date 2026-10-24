@@ -3,11 +3,14 @@ import {
   capPercent,
   describeInterval,
   formatAmount,
+  formatAmountWithSymbol,
   formatLedgers,
   maxCharges,
   parseAmount,
   pluralize,
+  rawAmount,
   shortAddress,
+  toUtcDay,
   unchargeableRemainder,
 } from "./format";
 
@@ -29,6 +32,40 @@ describe("formatAmount", () => {
 
   it("keeps the sign of negative values", () => {
     expect(formatAmount(-50_000_000n, 7)).toBe("-5");
+  });
+
+  it("follows the locale's grouping and decimal separators", () => {
+    expect(formatAmount(12_500_000n, 7, undefined, "de-DE")).toBe("1,25");
+    expect(formatAmount(123_456_789_012_345_678n, 7, undefined, "de-DE")).toBe(
+      "12.345.678.901,2345678",
+    );
+    expect(formatAmount(12_500_000n, 7, undefined, "fr-FR")).toBe("1,25");
+  });
+
+  it("never changes the value of an amount across locales", () => {
+    const locales = ["en-US", "de-DE", "fr-FR", "ja-JP", "hi-IN", "ar-EG"];
+    const samples = [
+      0n,
+      1n,
+      9_999_999n,
+      10_000_000n,
+      12_500_000n,
+      123_456_789_012_345_678n,
+      -50_000_000n,
+    ];
+    for (const locale of locales) {
+      for (const raw of samples) {
+        const formatted = formatAmount(raw, 7, undefined, locale);
+        // Round-trip through the locale-agnostic parser must recover the raw value.
+        const normalized = formatted.replace(/[^0-9.-]/g, "");
+        const sign = raw < 0n ? -1n : 1n;
+        const magnitude = raw < 0n ? -raw : raw;
+        const whole = magnitude / 10_000_000n;
+        const frac = magnitude % 10_000_000n;
+        const expected = frac === 0n ? `${whole}` : `${whole}.${frac.toString().padStart(7, "0").replace(/0+$/, "")}`;
+        expect(normalized).toBe(sign < 0n ? `-${expected}` : expected);
+      }
+    }
   });
 });
 
@@ -88,6 +125,37 @@ describe("ledger time", () => {
   it("formats ledger counts", () => {
     expect(formatLedgers(17_280)).toBe("17,280 ledgers");
     expect(formatLedgers(1)).toBe("1 ledger");
+  });
+});
+
+describe("exact amount helpers", () => {
+  it("returns raw units as an exact string, never rounded", () => {
+    expect(rawAmount(123_456_789_012_345_678_901_234_567n)).toBe(
+      "123456789012345678901234567",
+    );
+    expect(rawAmount(0n)).toBe("0");
+    expect(rawAmount(-42n)).toBe("-42");
+  });
+
+  it("formats an amount with its symbol and decimals", () => {
+    expect(formatAmountWithSymbol(12_500_000n, 7, "USDC")).toBe("1.25 USDC");
+    expect(formatAmountWithSymbol(10_000_000n, 7, "XLM")).toBe("1 XLM");
+  });
+
+  it("formats two tokens independently and never adds them", () => {
+    const usdc = formatAmountWithSymbol(12_500_000n, 7, "USDC");
+    const xlm = formatAmountWithSymbol(30_000_000n, 7, "XLM");
+    expect(usdc).toBe("1.25 USDC");
+    expect(xlm).toBe("3 XLM");
+    expect(usdc).not.toContain("XLM");
+    expect(xlm).not.toContain("USDC");
+  });
+
+  it("buckets timestamps by UTC day", () => {
+    expect(toUtcDay(0)).toBe("1970-01-01");
+    expect(toUtcDay(1_700_000_000)).toBe("2023-11-14");
+    expect(toUtcDay(1_700_000_000)).toBe(toUtcDay(1_700_086_399));
+    expect(toUtcDay(1_700_086_400)).toBe("2023-11-15");
   });
 });
 
