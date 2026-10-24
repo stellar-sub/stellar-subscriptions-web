@@ -60,9 +60,14 @@ export function ConnectButton() {
 
   if (!installed) {
     return (
-      <a href="https://freighter.app" target="_blank" rel="noreferrer" className="btn-primary">
-        Install Freighter
-      </a>
+      <div className="flex flex-col items-end gap-2">
+        <a href="https://freighter.app" target="_blank" rel="noreferrer" className="btn-primary">
+          Install Freighter
+        </a>
+        <a href="/onboarding" className="text-xs text-muted hover:text-primary">
+          Learn more
+        </a>
+      </div>
     );
   }
 

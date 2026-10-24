@@ -1,0 +1,22 @@
+# Code owners are requested for review on any PR that touches these paths.
+# Later rules take precedence over earlier ones, so the default below is
+# overridden for the money-moving code.
+#
+# The team must exist in the stellar-sub GitHub organization with write access
+# to this repository, or GitHub will silently skip the rule.
+
+*                                   @stellar-sub/maintainers
+
+# Contract bindings and anything that builds, signs or submits a transaction
+# that moves funds. These paths must never be merged without maintainer review.
+/lib/contracts.ts                   @stellar-sub/maintainers
+/lib/contracts.test.ts              @stellar-sub/maintainers
+/lib/subscription.ts                @stellar-sub/maintainers
+/lib/subscription.test.ts           @stellar-sub/maintainers
+/lib/stellar.ts                     @stellar-sub/maintainers
+/lib/freighter.ts                   @stellar-sub/maintainers
+
+# Subscription and plan UI: charge caps, schedules and authorization copy.
+/components/subscribe/              @stellar-sub/maintainers
+/components/subscription/           @stellar-sub/maintainers
+/components/plan/                   @stellar-sub/maintainers

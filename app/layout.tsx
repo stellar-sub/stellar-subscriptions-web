@@ -5,6 +5,7 @@ import { NetworkNotice } from "@/components/layout/NetworkNotice";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { WalletProvider } from "@/components/wallet/WalletProvider";
+import { AccountFundingStatus } from "@/components/wallet/AccountFundingStatus";
 
 export const metadata: Metadata = {
   title: { default: "Stellar Subscriptions", template: "%s · Stellar Subscriptions" },
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </a>
             <SiteHeader />
             <NetworkNotice />
+            <AccountFundingStatus />
             <main id="main" className="mx-auto w-full max-w-page flex-1 px-4 py-8 sm:px-6">
               {children}
             </main>

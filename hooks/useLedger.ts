@@ -5,7 +5,12 @@ import { getLatestLedger } from "@/lib/stellar";
 import type { Network } from "@/types";
 
 export interface LedgerClock {
-  /** Latest ledger sequence seen, or null before the first answer. */
+  /**
+   * Latest ledger sequence seen, or null before the first answer. This is the
+   * single shared ledger value: pass it to `dueSubscriptions` (in
+   * `lib/subscription.ts`) so rows that are clearly not due are filtered out
+   * before the contract is asked.
+   */
   sequence: number | null;
   /** When that sequence was observed (ms since epoch). */
   observedAt: number;

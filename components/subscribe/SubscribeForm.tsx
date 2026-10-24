@@ -134,9 +134,14 @@ export function SubscribeForm({ plan, token }: { plan: Plan; token: TokenInfo })
           Connect wallet to subscribe
         </button>
       ) : (
-        <a href="https://freighter.app" target="_blank" rel="noreferrer" className="btn-primary w-full py-3">
-          Install Freighter to subscribe
-        </a>
+        <div className="space-y-2">
+          <a href="https://freighter.app" target="_blank" rel="noreferrer" className="btn-primary w-full py-3 block">
+            Install Freighter to subscribe
+          </a>
+          <Link href="/onboarding" className="text-center text-xs text-muted hover:text-primary">
+            Learn what a wallet is
+          </Link>
+        </div>
       )}
 
       <TxProgress

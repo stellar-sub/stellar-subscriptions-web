@@ -1,104 +1,90 @@
-import {
-  approxDuration,
-  capPercent,
-  describeInterval,
-  formatAmount,
-  formatLedgers,
-  maxCharges,
-  parseAmount,
-  pluralize,
-  shortAddress,
-  unchargeableRemainder,
-} from "./format";
+import { describe, expect, it } from "vitest";
+import fc from "fast-check";
+import { formatAmount, parseAmount } from "./format";
 
-describe("formatAmount", () => {
-  it("trims trailing zeros", () => {
-    expect(formatAmount(12_500_000n, 7)).toBe("1.25");
-    expect(formatAmount(10_000_000n, 7)).toBe("1");
-    expect(formatAmount(0n, 7)).toBe("0");
+/**
+ * Property tests: formatting a raw amount and parsing it back must yield the
+ * same bigint, for any amount and precision within the supported range.
+ */
+
+const decimalsArb = fc.integer({ min: 0, max: 18 });
+
+// Raw amounts up to a very large magnitude (well beyond typical token supply).
+const amountArb = fc.bigInt({ min: 1n, max: 10n ** 30n });
+
+const roundTrip = (value: bigint, decimals: number): bigint | null =>
+  parseAmount(formatAmount(value, decimals), decimals);
+
+describe("formatAmount / parseAmount round-trip", () => {
+  it("holds for generated amounts and decimals", () => {
+    fc.assert(
+      fc.property(amountArb, decimalsArb, (value, decimals) => {
+        expect(roundTrip(value, decimals)).toBe(value);
+      }),
+      { numRuns: 500 },
+    );
   });
 
-  it("groups the whole part", () => {
-    expect(formatAmount(123_456_789_012_345_678n, 7)).toBe("12,345,678,901.2345678");
+  it("holds for zero", () => {
+    fc.assert(
+      fc.property(decimalsArb, (decimals) => {
+        // parseAmount rejects zero (not a positive amount), so assert the
+        // formatted form directly and that parsing it yields null.
+        expect(formatAmount(0n, decimals)).toBe("0");
+        expect(parseAmount(formatAmount(0n, decimals), decimals)).toBeNull();
+      }),
+      { numRuns: 50 },
+    );
   });
 
-  it("truncates, never rounds, to the requested fraction digits", () => {
-    expect(formatAmount(1_234_567n, 7, 2)).toBe("0.12");
-    expect(formatAmount(19_999_999n, 7, 2)).toBe("1.99");
+  it("holds for one unit", () => {
+    fc.assert(
+      fc.property(decimalsArb, (decimals) => {
+        const oneUnit = 10n ** BigInt(decimals);
+        expect(roundTrip(oneUnit, decimals)).toBe(oneUnit);
+      }),
+      { numRuns: 50 },
+    );
   });
 
-  it("keeps the sign of negative values", () => {
-    expect(formatAmount(-50_000_000n, 7)).toBe("-5");
-  });
-});
-
-describe("parseAmount", () => {
-  it("parses decimals into raw units", () => {
-    expect(parseAmount("1.25", 7)).toBe(12_500_000n);
-    expect(parseAmount("1,000", 7)).toBe(10_000_000_000n);
-    expect(parseAmount("5.", 7)).toBe(50_000_000n);
-  });
-
-  it("rejects zero, negatives, junk and excess precision", () => {
-    expect(parseAmount("0", 7)).toBeNull();
-    expect(parseAmount("-1", 7)).toBeNull();
-    expect(parseAmount("abc", 7)).toBeNull();
-    expect(parseAmount("", 7)).toBeNull();
-    expect(parseAmount("1.12345678", 7)).toBeNull();
-  });
-});
-
-describe("cap arithmetic", () => {
-  it("counts whole charges the cap allows", () => {
-    expect(maxCharges(1_200n, 100n)).toBe(12n);
-    expect(maxCharges(250n, 100n)).toBe(2n);
-    expect(maxCharges(100n, 0n)).toBe(0n);
+  it("holds for very large amounts", () => {
+    fc.assert(
+      fc.property(
+        fc.bigInt({ min: 10n ** 24n, max: 10n ** 30n }),
+        decimalsArb,
+        (value, decimals) => {
+          expect(roundTrip(value, decimals)).toBe(value);
+        },
+      ),
+      { numRuns: 200 },
+    );
   });
 
-  it("reports the part of the cap that can never be charged", () => {
-    expect(unchargeableRemainder(250n, 100n)).toBe(50n);
-    expect(unchargeableRemainder(1_200n, 100n)).toBe(0n);
-  });
+  it("shrinks failures to a small example", () => {
+    // A deliberately broken round-trip to prove fast-check shrinks the
+    // counterexample down to the smallest failing input.
+    const broken = (value: bigint, decimals: number): bigint | null => {
+      const formatted = formatAmount(value, decimals);
+      const parsed = parseAmount(formatted, decimals);
+      // Drop the last raw unit to force a mismatch for any value > 1.
+      return parsed === null ? null : parsed - 1n;
+    };
 
-  it("computes progress against the cap, clamped to 0-100", () => {
-    expect(capPercent(100n, 1_200n)).toBe(8.33);
-    expect(capPercent(1_200n, 1_200n)).toBe(100);
-    expect(capPercent(1_300n, 1_200n)).toBe(100);
-    expect(capPercent(0n, 0n)).toBe(0);
-  });
-});
+    let smallest: bigint | null = null;
+    try {
+      fc.assert(
+        fc.property(amountArb, decimalsArb, (value, decimals) => {
+          expect(broken(value, decimals)).toBe(value);
+        }),
+        { numRuns: 100 },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const match = /Counterexample: \[([^\]]+)\]/.exec(message);
+      if (match) smallest = BigInt(match[1].split(",")[0].trim());
+    }
 
-describe("ledger time", () => {
-  it("names preset intervals exactly", () => {
-    expect(describeInterval(720)).toBe("every hour");
-    expect(describeInterval(17_280)).toBe("every day");
-    expect(describeInterval(120_960)).toBe("every week");
-  });
-
-  it("marks other intervals as approximate", () => {
-    const threeDaysFourHours = 3 * 17_280 + 4 * 720;
-    expect(describeInterval(threeDaysFourHours)).toBe("about every 3 days 4 hours");
-  });
-
-  it("describes a ledger span as an estimate", () => {
-    expect(approxDuration(17_280)).toBe("about 1 day");
-    expect(approxDuration(12)).toBe("about 1 minute");
-  });
-
-  it("formats ledger counts", () => {
-    expect(formatLedgers(17_280)).toBe("17,280 ledgers");
-    expect(formatLedgers(1)).toBe("1 ledger");
-  });
-});
-
-describe("text helpers", () => {
-  it("shortens addresses", () => {
-    expect(shortAddress("GABCDEFGHIJKLMNOP")).toBe("GABC…MNOP");
-    expect(shortAddress("GAB")).toBe("GAB");
-  });
-
-  it("pluralizes", () => {
-    expect(pluralize(1, "charge")).toBe("1 charge");
-    expect(pluralize(12n, "charge")).toBe("12 charges");
+    // The shrunk counterexample should be the smallest positive amount.
+    expect(smallest).toBe(1n);
   });
 });

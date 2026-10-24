@@ -9,6 +9,7 @@
 import { Asset, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   ContractError,
+  LEDGER_SECONDS,
   NETWORKS,
   arg,
   getEventWindow,
@@ -294,20 +295,53 @@ export async function getRegistryStats(network: Network): Promise<RegistryStats>
 
 const tokenCache = new Map<string, Promise<TokenInfo>>();
 
-/** Symbol, name and decimals of a SEP-41 token. Cached per network+token. */
+/** A SEP-41 contract id: `C` followed by 55 base-32 characters. */
+const CONTRACT_ID_RE = /^C[A-Z2-7]{55}$/;
+
+/** True when `value` is shaped like a Stellar contract id. No network call. */
+export function isContractId(value: string): boolean {
+  return CONTRACT_ID_RE.test(value.trim());
+}
+
+/**
+ * Symbol, name and decimals of a SEP-41 token. Cached per network+token.
+ *
+ * Rejects before any network call when `token` isn't a contract id, and
+ * rejects with a `ContractError` when the contract can't be read (wrong
+ * address, not a SEP-41 token, or the node is unreachable).
+ */
 export function getTokenInfo(network: Network, token: string): Promise<TokenInfo> {
-  const key = `${network}:${token}`;
+  const contractId = token.trim();
+  if (!isContractId(contractId)) {
+    return Promise.reject(
+      new ContractError(
+        "That isn't a valid token contract id. Paste the C… address of a SEP-41 token.",
+        token,
+      ),
+    );
+  }
+  const key = `${network}:${contractId}`;
   let cached = tokenCache.get(key);
   if (!cached) {
     cached = (async () => {
-      const [symbol, name, decimals] = await Promise.all([
-        readContract<string>(network, token, "symbol", [], TOKEN_ERRORS),
-        readContract<string>(network, token, "name", [], TOKEN_ERRORS),
-        readContract<number>(network, token, "decimals", [], TOKEN_ERRORS),
-      ]);
+      let symbol: string;
+      let name: string;
+      let decimals: number;
+      try {
+        [symbol, name, decimals] = await Promise.all([
+          readContract<string>(network, contractId, "symbol", [], TOKEN_ERRORS),
+          readContract<string>(network, contractId, "name", [], TOKEN_ERRORS),
+          readContract<number>(network, contractId, "decimals", [], TOKEN_ERRORS),
+        ]);
+      } catch (err) {
+        throw new ContractError(
+          "This token couldn't be read. Check that the address is a SEP-41 token contract on this network.",
+          err instanceof Error ? err.message : String(err),
+        );
+      }
       // The native asset's SAC reports "native"; people know it as XLM.
       const display = symbol === "native" ? "XLM" : symbol;
-      return { contractId: token, symbol: display, name, decimals: Number(decimals) };
+      return { contractId, symbol: display, name, decimals: Number(decimals) };
     })();
     cached.catch(() => tokenCache.delete(key));
     tokenCache.set(key, cached);
@@ -445,6 +479,10 @@ export async function createPlan(ctx: WriteCtx, input: CreatePlanInput): Promise
   return { ...result, id: toNumber(result.returnValue) };
 }
 
+/**
+ * Close a plan to new subscribers. Existing subscriptions are untouched: they
+ * keep charging exactly as their subscribers authorized. This cannot be undone.
+ */
 export function deactivatePlan(ctx: WriteCtx, planId: number): Promise<TxResult> {
   return invokeContract(
     ctx,
@@ -493,15 +531,25 @@ export function decodeChargeEvent(event: rpc.Api.EventResponse): ChargeEvent {
   };
 }
 
+/** The result of {@link getChargeEvents}: recent history plus where it starts. */
+export interface ChargeEventsResult {
+  events: ChargeEvent[];
+  /** The first ledger the RPC node's event window covers. */
+  fromLedger: number;
+  /** The latest ledger the node reported when the walk finished. */
+  latestLedger: number;
+}
+
 /**
  * Every `charged` event paid to `merchant` that the RPC node still holds.
  * RPC nodes keep a limited window of recent ledgers, so this is recent
  * history, not all-time history; `fromLedger` says where the window starts.
+ * Older history needs an indexer.
  */
 export async function getChargeEvents(
   network: Network,
   merchant: string,
-): Promise<{ events: ChargeEvent[]; fromLedger: number }> {
+): Promise<ChargeEventsResult> {
   const server = getServer(network);
   const { oldest } = await getEventWindow(network);
   const filters: rpc.Api.EventFilter[] = [
@@ -528,7 +576,21 @@ export async function getChargeEvents(
     page = await server.getEvents({ cursor: page.cursor, filters, limit: PAGE_SIZE });
     events.push(...page.events.map(decodeChargeEvent));
   }
-  return { events, fromLedger };
+  return { events, fromLedger, latestLedger: page.latestLedger };
+}
+
+/**
+ * An *estimate* of when `ledger` closed, derived from the latest ledger's
+ * close time and the average ledger interval. Ledgers can close faster or
+ * slower than the average, so callers must label this as approximate.
+ */
+export function estimateLedgerDate(
+  ledger: number,
+  latestLedger: number,
+  latestClosedAt: Date,
+): Date {
+  const behind = Math.max(0, latestLedger - ledger);
+  return new Date(latestClosedAt.getTime() - behind * LEDGER_SECONDS * 1000);
 }
 
 /** Re-exported so callers can tell a contract rejection from other failures. */

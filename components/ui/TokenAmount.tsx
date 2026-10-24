@@ -8,8 +8,8 @@ export function TokenAmount({ token, value, className = "" }: { token: string; v
   const { data: info, error } = useToken(token);
   if (error) {
     return (
-      <span className={`tabular-nums ${className}`} title="Token details unavailable; showing raw units">
-        {value.toLocaleString("en-US")} units
+      <span className={`tabular-nums text-warn ${className}`} title="Token details unavailable; showing raw units">
+        {value.toLocaleString("en-US")} raw units <span className="text-xs">(token details unavailable)</span>
       </span>
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ContractError, type WriteCtx } from "@/lib/stellar";
 import { useWallet } from "@/hooks/useWallet";
 import type { TxPhase, TxResult } from "@/types";
@@ -30,6 +30,20 @@ export function useTx(): TxState {
     setHash(null);
     setError(null);
   }, []);
+
+  // Register beforeunload guard while transaction is pending (#35)
+  useEffect(() => {
+    if (!PENDING.includes(phase)) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase]);
 
   const run = useCallback(
     async <T extends TxResult>(action: (ctx: WriteCtx) => Promise<T>): Promise<T | null> => {
