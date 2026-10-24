@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useWallet } from "@/hooks/useWallet";
 import { contractsFor } from "@/lib/contracts";
 import { shortAddress } from "@/lib/format";
@@ -24,6 +25,11 @@ export function SiteFooter() {
           <p className="text-muted">
             The cap, the billing interval and cancellation are enforced by the smart contract, not by this
             website. No one — including us — can charge you outside what you authorized.
+          </p>
+          <p>
+            <Link href="/help" className="text-brand hover:underline">
+              How caps and intervals work
+            </Link>
           </p>
         </div>
 

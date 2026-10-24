@@ -1,209 +1,323 @@
 'use client';
 
-import React from 'react';
-import Link from 'next/link';
-import { SubStatusBadge } from './SubStatusBadge';
-import { AddressLink } from '@/components/common/AddressLink';
-import { TokenAmount } from '@/components/common/TokenAmount';
-import { shortAddress } from '@/lib/format';
-import type { Subscription } from '@/lib/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import ChargeButton from './ChargeButton';
+
+export type SubscriptionStatus = 'active' | 'paused' | 'cancelled' | 'exhausted';
+
+export interface SubscriberSubscription {
+  id: string;
+  subscriber: string;
+  amount: number;
+  nextChargeLedger: number;
+  status: SubscriptionStatus;
+  planId?: string | number | null;
+  planName?: string | null;
+}
 
 interface SubscriberTableProps {
-  subs: Subscription[];
-  ledgerSequence: number;
-  ledgerCloseTime?: number;
+  subscriptions: SubscriberSubscription[];
+  onReload?: () => void;
 }
 
-function capPercent(charged: bigint, cap: bigint): number {
-  if (cap <= 0n) return 0;
-  const pct = Number((charged * 10000n) / cap) / 100;
-  return Math.max(0, Math.min(100, pct));
+type StatusFilter = 'all' | SubscriptionStatus;
+type SortKey = 'subscriber' | 'amount' | 'nextChargeLedger' | 'status' | 'plan';
+type SortDirection = 'asc' | 'desc';
+
+interface SortState {
+  key: SortKey;
+  direction: SortDirection;
 }
 
-function formatEstimate(
-  sub: Subscription,
-  ledgerSequence: number,
-  ledgerCloseTime?: number,
-): string {
-  if (sub.status === 'cancelled') {
-    return 'No further charges — subscription cancelled';
-  }
-  if (sub.status === 'exhausted' || sub.totalCharged >= sub.totalCap) {
-    return 'No further charges — cap reached';
-  }
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'exhausted', label: 'Exhausted' },
+];
 
-  const remaining = sub.nextChargeLedger - ledgerSequence;
+const SORT_KEYS: SortKey[] = ['subscriber', 'amount', 'nextChargeLedger', 'status', 'plan'];
 
-  if (remaining <= 0) {
-    return 'Eligible now — the contract allows at most one charge per interval';
-  }
-
-  if (ledgerCloseTime) {
-    const seconds = remaining * ledgerCloseTime;
-    if (seconds < 60) {
-      return `in about ${Math.max(1, Math.round(seconds))}s (estimate)`;
-    }
-    if (seconds < 3600) {
-      return `in about ${Math.round(seconds / 60)}m (estimate)`;
-    }
-    if (seconds < 86400) {
-      return `in about ${Math.round(seconds / 3600)}h (estimate)`;
-    }
-    return `in about ${Math.round(seconds / 86400)}d (estimate)`;
-  }
-
-  return `in about ${remaining} ledger${remaining === 1 ? '' : 's'} (estimate)`;
+function isStatusFilter(value: string | null): value is StatusFilter {
+  return value !== null && STATUS_FILTERS.some((f) => f.value === value);
 }
 
-export function SubscriberTable({
-  subs,
-  ledgerSequence,
-  ledgerCloseTime,
-}: SubscriberTableProps) {
-  if (!subs || subs.length === 0) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
-        No subscribers yet.
-      </div>
-    );
+function isSortKey(value: string | null): value is SortKey {
+  return value !== null && (SORT_KEYS as string[]).includes(value);
+}
+
+function isSortDirection(value: string | null): value is SortDirection {
+  return value === 'asc' || value === 'desc';
+}
+
+function planLabel(sub: SubscriberSubscription): string {
+  if (sub.planName) return sub.planName;
+  if (sub.planId !== undefined && sub.planId !== null && sub.planId !== '') {
+    return `Plan #${sub.planId}`;
   }
+  return 'No plan';
+}
+
+function planKey(sub: SubscriberSubscription): string {
+  if (sub.planId !== undefined && sub.planId !== null && sub.planId !== '') {
+    return String(sub.planId);
+  }
+  return '__none__';
+}
+
+function statusText(sub: SubscriberSubscription): string {
+  switch (sub.status) {
+    case 'active':
+      return `Active — not due until ledger ${sub.nextChargeLedger}`;
+    case 'paused':
+      return 'Paused — no charges will be made';
+    case 'cancelled':
+      return 'Cancelled — no further charges';
+    case 'exhausted':
+      return 'Cap reached — no further charges allowed';
+    default:
+      return '';
+  }
+}
+
+function formatAmount(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export default function SubscriberTable({ subscriptions, onReload }: SubscriberTableProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [planFilter, setPlanFilter] = useState<string>('all');
+  const [sort, setSort] = useState<SortState>({ key: 'subscriber', direction: 'asc' });
+  const [initialized, setInitialized] = useState(false);
+
+  // Initialize state from the URL on mount.
+  useEffect(() => {
+    const urlStatus = searchParams.get('status');
+    const urlPlan = searchParams.get('plan');
+    const urlSortKey = searchParams.get('sort');
+    const urlSortDir = searchParams.get('dir');
+
+    if (isStatusFilter(urlStatus)) {
+      setStatusFilter(urlStatus);
+    }
+    if (urlPlan !== null && urlPlan !== '') {
+      setPlanFilter(urlPlan);
+    }
+    if (isSortKey(urlSortKey)) {
+      setSort({
+        key: urlSortKey,
+        direction: isSortDirection(urlSortDir) ? urlSortDir : 'asc',
+      });
+    }
+    setInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist filter and sort selections in the URL.
+  useEffect(() => {
+    if (!initialized) return;
+
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+
+    if (statusFilter === 'all') {
+      params.delete('status');
+    } else {
+      params.set('status', statusFilter);
+    }
+
+    if (planFilter === 'all') {
+      params.delete('plan');
+    } else {
+      params.set('plan', planFilter);
+    }
+
+    if (sort.key === 'subscriber' && sort.direction === 'asc') {
+      params.delete('sort');
+      params.delete('dir');
+    } else {
+      params.set('sort', sort.key);
+      params.set('dir', sort.direction);
+    }
+
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+
+    if (nextQuery !== currentQuery) {
+      router.replace(nextQuery ? `?${nextQuery}` : '?', { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, planFilter, sort, initialized]);
+
+  const planOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const sub of subscriptions) {
+      const key = planKey(sub);
+      if (!seen.has(key)) {
+        seen.set(key, planLabel(sub));
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [subscriptions]);
+
+  const visibleRows = useMemo(() => {
+    const filtered = subscriptions.filter((sub) => {
+      if (statusFilter !== 'all' && sub.status !== statusFilter) return false;
+      if (planFilter !== 'all' && planKey(sub) !== planFilter) return false;
+      return true;
+    });
+
+    const sorted = [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sort.key) {
+        case 'subscriber':
+          cmp = a.subscriber.localeCompare(b.subscriber);
+          break;
+        case 'amount':
+          cmp = a.amount - b.amount;
+          break;
+        case 'nextChargeLedger':
+          cmp = a.nextChargeLedger - b.nextChargeLedger;
+          break;
+        case 'status':
+          cmp = a.status.localeCompare(b.status);
+          break;
+        case 'plan':
+          cmp = planLabel(a).localeCompare(planLabel(b));
+          break;
+        default:
+          cmp = 0;
+      }
+      return sort.direction === 'asc' ? cmp : -cmp;
+    });
+
+    return sorted;
+  }, [subscriptions, statusFilter, planFilter, sort]);
+
+  const toggleSort = useCallback((key: SortKey) => {
+    setSort((prev) => {
+      if (prev.key === key) {
+        return { key, direction: prev.direction === 'asc' ? 'desc' : 'asc' };
+      }
+      return { key, direction: 'asc' };
+    });
+  }, []);
+
+  const sortIndicator = (key: SortKey) => {
+    if (sort.key !== key) return '';
+    return sort.direction === 'asc' ? ' ▲' : ' ▼';
+  };
+
+  const handleReload = useCallback(() => {
+    if (onReload) onReload();
+  }, [onReload]);
+
+  const filtersActive = statusFilter !== 'all' || planFilter !== 'all';
 
   return (
-    <>
-      {/* Desktop / wide screens */}
-      <div className="hidden overflow-x-auto rounded-lg border border-gray-200 bg-white md:block">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
+    <div className="subscriber-table">
+      <div className="subscriber-table__filters">
+        <label className="subscriber-table__filter">
+          <span>Status</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          >
+            {STATUS_FILTERS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="subscriber-table__filter">
+          <span>Plan</span>
+          <select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+            <option value="all">All</option>
+            {planOptions.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {onReload ? (
+          <button type="button" className="subscriber-table__reload" onClick={handleReload}>
+            Reload
+          </button>
+        ) : null}
+      </div>
+
+      {visibleRows.length === 0 ? (
+        <p className="subscriber-table__empty">
+          {filtersActive
+            ? 'No subscribers match the selected filters.'
+            : 'No subscribers yet.'}
+        </p>
+      ) : (
+        <table className="subscriber-table__table">
+          <thead>
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Subscription
+              <th>
+                <button type="button" onClick={() => toggleSort('subscriber')}>
+                  Subscriber{sortIndicator('subscriber')}
+                </button>
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Subscriber
+              <th>
+                <button type="button" onClick={() => toggleSort('amount')}>
+                  Amount{sortIndicator('amount')}
+                </button>
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Status
+              <th>
+                <button type="button" onClick={() => toggleSort('nextChargeLedger')}>
+                  Next charge ledger{sortIndicator('nextChargeLedger')}
+                </button>
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Charged of cap
+              <th>
+                <button type="button" onClick={() => toggleSort('status')}>
+                  Status{sortIndicator('status')}
+                </button>
               </th>
-              <th className="px-4 py-3 text-left font-medium text-gray-600">
-                Next charge
+              <th>
+                <button type="button" onClick={() => toggleSort('plan')}>
+                  Plan{sortIndicator('plan')}
+                </button>
               </th>
+              <th>Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
-            {subs.map((sub) => {
-              const pct = capPercent(sub.totalCharged, sub.totalCap);
-              return (
-                <tr key={sub.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-mono">
-                    <Link
-                      href={`/subscriptions/${sub.id}`}
-                      className="text-blue-600 hover:underline"
-                    >
-                      #{sub.id}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <AddressLink address={sub.subscriber}>
-                      {shortAddress(sub.subscriber)}
-                    </AddressLink>
-                  </td>
-                  <td className="px-4 py-3">
-                    <SubStatusBadge status={sub.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-gray-700">
-                        <TokenAmount amount={sub.totalCharged} /> of{' '}
-                        <TokenAmount amount={sub.totalCap} />
-                      </span>
-                      <div
-                        className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200"
-                        role="progressbar"
-                        aria-valuenow={Math.round(pct)}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                      >
-                        <div
-                          className="h-full rounded-full bg-blue-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-700">
-                    {formatEstimate(sub, ledgerSequence, ledgerCloseTime)}
-                  </td>
-                </tr>
-              );
-            })}
+          <tbody>
+            {visibleRows.map((sub) => (
+              <tr key={sub.id}>
+                <td>{sub.subscriber}</td>
+                <td>{formatAmount(sub.amount)}</td>
+                <td>{sub.nextChargeLedger}</td>
+                <td>
+                  <span className={`subscriber-table__status subscriber-table__status--${sub.status}`}>
+                    {sub.status}
+                  </span>
+                  <span className="subscriber-table__status-detail">{statusText(sub)}</span>
+                </td>
+                <td>{planLabel(sub)}</td>
+                <td>
+                  <ChargeButton subscriptionId={sub.id} disabled={sub.status !== 'active'} />
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
-      </div>
-
-      {/* Narrow screens: stacked cards */}
-      <div className="flex flex-col gap-3 md:hidden">
-        {subs.map((sub) => {
-          const pct = capPercent(sub.totalCharged, sub.totalCap);
-          return (
-            <div
-              key={sub.id}
-              className="rounded-lg border border-gray-200 bg-white p-4 text-sm"
-            >
-              <div className="mb-2 flex items-center justify-between">
-                <Link
-                  href={`/subscriptions/${sub.id}`}
-                  className="font-mono text-blue-600 hover:underline"
-                >
-                  #{sub.id}
-                </Link>
-                <SubStatusBadge status={sub.status} />
-              </div>
-              <dl className="grid grid-cols-1 gap-2">
-                <div>
-                  <dt className="text-xs text-gray-500">Subscriber</dt>
-                  <dd>
-                    <AddressLink address={sub.subscriber}>
-                      {shortAddress(sub.subscriber)}
-                    </AddressLink>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-gray-500">Charged of cap</dt>
-                  <dd className="flex flex-col gap-1">
-                    <span className="text-gray-700">
-                      <TokenAmount amount={sub.totalCharged} /> of{' '}
-                      <TokenAmount amount={sub.totalCap} />
-                    </span>
-                    <div
-                      className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200"
-                      role="progressbar"
-                      aria-valuenow={Math.round(pct)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <div
-                        className="h-full rounded-full bg-blue-500"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-gray-500">Next charge</dt>
-                  <dd className="text-gray-700">
-                    {formatEstimate(sub, ledgerSequence, ledgerCloseTime)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          );
-        })}
-      </div>
-    </>
+      )}
+    </div>
   );
 }
-
-export default SubscriberTable;

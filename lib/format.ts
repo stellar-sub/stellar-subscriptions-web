@@ -28,8 +28,41 @@ export const INTERVAL_PRESETS: IntervalPreset[] = [
 const pow10 = (decimals: number): bigint => 10n ** BigInt(decimals);
 
 /**
+ * The user's locale, resolved once. Falls back to `en-US` when the runtime
+ * cannot report one (e.g. some server contexts).
+ */
+function resolveLocale(): string {
+  try {
+    return new Intl.NumberFormat().resolvedOptions().locale || "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+const LOCALE = resolveLocale();
+
+/**
+ * Group an integer digit string with the locale's grouping separator, without
+ * ever routing the value through a floating-point number.
+ */
+function groupDigits(digits: string, locale: string): string {
+  const parts = new Intl.NumberFormat(locale).formatToParts(1234567890);
+  const group = parts.find((p) => p.type === "group")?.value ?? ",";
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, group);
+}
+
+/** The locale's decimal separator, e.g. "." or ",". */
+function decimalSeparator(locale: string): string {
+  const parts = new Intl.NumberFormat(locale).formatToParts(1.5);
+  return parts.find((p) => p.type === "decimal")?.value ?? ".";
+}
+
+/**
  * Raw units to a grouped decimal string, trailing zeros trimmed:
- * `formatAmount(12_500_000n, 7)` → `"1.25"`.
+ * `formatAmount(12_500_000n, 7)` → `"1.25"` (or `"1,25"` in `de-DE`).
+ *
+ * Grouping and the decimal separator follow the user's locale, but the value
+ * is computed entirely in bigint so it never loses precision.
  */
 export function formatAmount(value: bigint, decimals: number, maxFraction = decimals): string {
   const negative = value < 0n;
@@ -38,8 +71,9 @@ export function formatAmount(value: bigint, decimals: number, maxFraction = deci
   const whole = abs / scale;
   let fraction = (abs % scale).toString().padStart(decimals, "0").slice(0, maxFraction);
   fraction = fraction.replace(/0+$/, "");
-  const grouped = whole.toLocaleString("en-US");
-  return `${negative ? "-" : ""}${grouped}${fraction ? `.${fraction}` : ""}`;
+  const grouped = groupDigits(whole.toString(), LOCALE);
+  const sep = decimalSeparator(LOCALE);
+  return `${negative ? "-" : ""}${grouped}${fraction ? `${sep}${fraction}` : ""}`;
 }
 
 export function formatToken(value: bigint, symbol: string, decimals: number): string {
@@ -48,7 +82,8 @@ export function formatToken(value: bigint, symbol: string, decimals: number): st
 
 /**
  * A user-typed decimal amount to raw units. Returns null for anything that is
- * not a positive number with at most `decimals` fraction digits.
+ * not a positive number with at most `decimals` fraction digits. Accepts both
+ * `,` and `.` as the decimal separator and ignores grouping separators.
  */
 export function parseAmount(input: string, decimals: number): bigint | null {
   const trimmed = input.trim().replace(/,/g, "");
@@ -99,6 +134,21 @@ export function approxDuration(ledgers: number): string {
 }
 
 /**
+ * An estimated wall-clock date for a ledger difference, in the user's local
+ * time zone. Ledgers close at roughly five seconds each, so the result is
+ * always approximate and callers must label it as an estimate.
+ *
+ * `formatEstimatedDate(17_280)` → `"Jan 2, 2025, 3:45 PM"` (local time).
+ */
+export function formatEstimatedDate(ledgers: number, from: Date = new Date()): string {
+  const target = new Date(from.getTime() + Math.max(0, ledgers) * LEDGER_SECONDS * 1000);
+  return new Intl.DateTimeFormat(LOCALE, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(target);
+}
+
+/**
  * How often a plan bills, in plain words: "every hour", "every day", or
  * "about every 3 days 4 hours" for intervals that are not a preset.
  */
@@ -114,7 +164,7 @@ export function describeInterval(ledgers: number): string {
 
 /** Ledger count with grouping: "17,280 ledgers". */
 export function formatLedgers(ledgers: number): string {
-  return `${ledgers.toLocaleString("en-US")} ${ledgers === 1 ? "ledger" : "ledgers"}`;
+  return `${ledgers.toLocaleString(LOCALE)} ${ledgers === 1 ? "ledger" : "ledgers"}`;
 }
 
 /** "GABC…WXYZ" */
@@ -125,5 +175,5 @@ export function shortAddress(address: string, keep = 4): string {
 
 export function pluralize(count: bigint | number, singular: string, plural = `${singular}s`): string {
   const n = typeof count === "bigint" ? count : BigInt(count);
-  return `${n.toLocaleString("en-US")} ${n === 1n ? singular : plural}`;
+  return `${n.toLocaleString(LOCALE)} ${n === 1n ? singular : plural}`;
 }

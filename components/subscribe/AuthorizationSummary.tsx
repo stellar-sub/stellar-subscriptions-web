@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   approxDuration,
   describeInterval,
@@ -76,7 +77,11 @@ export function AuthorizationSummary({
       <p className="border-t border-line pt-3 text-xs text-muted">
         These limits are enforced by the subscription contract, not by this website. Freighter will ask you to
         approve the contract to spend up to your cap from your {token.symbol} balance — the same limit. Times are
-        estimates: the contract counts ledgers, which close about every 5 seconds.
+        estimates: the contract counts ledgers, which close about every 5 seconds.{" "}
+        <Link href="/help" className="text-brand hover:underline">
+          How caps and intervals work
+        </Link>
+        .
       </p>
     </section>
   );

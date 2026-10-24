@@ -1,41 +1,58 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getLatestLedger } from "@/lib/stellar";
-import type { Network } from "@/types";
+import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePublicClient } from "wagmi";
+import type { PublicClient } from "viem";
 
-export interface LedgerClock {
-  /** Latest ledger sequence seen, or null before the first answer. */
-  sequence: number | null;
-  /** When that sequence was observed (ms since epoch). */
-  observedAt: number;
+/** How often the shared ledger clock ticks, in milliseconds. */
+export const LEDGER_POLL_INTERVAL_MS = 15_000;
+
+export type LedgerClock = {
+  /** Monotonically increasing tick counter, bumped once per poll interval. */
+  tick: number;
+  /** The public client used to read the ledger. */
+  client: PublicClient | undefined;
+};
+
+const LedgerClockContext = createContext<LedgerClock | null>(null);
+
+/**
+ * Provides a single ledger clock for the whole page so that every consumer
+ * shares one polling timer instead of starting its own.
+ */
+export function LedgerClockProvider({ children }: { children: ReactNode }) {
+  const client = usePublicClient();
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+    }, LEDGER_POLL_INTERVAL_MS);
+
+    return () => clearInterval(id);
+  }, []);
+
+  return createElement(LedgerClockContext.Provider, { value: { tick, client } }, children);
 }
 
 /**
- * The network's latest ledger, refreshed every `intervalMs`. Countdowns use
- * this rather than the local clock, because the contracts schedule charges
- * by ledger number.
+ * Reads the shared ledger clock. Falls back to a local clock when no provider
+ * is mounted so existing call sites keep working.
  */
-export function useLedger(network: Network, intervalMs = 15_000): LedgerClock {
-  const [clock, setClock] = useState<LedgerClock>({ sequence: null, observedAt: 0 });
+export function useLedger(): LedgerClock {
+  const shared = useContext(LedgerClockContext);
+  const client = usePublicClient();
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
-    let active = true;
-    const tick = async () => {
-      try {
-        const sequence = await getLatestLedger(network);
-        if (active) setClock({ sequence, observedAt: Date.now() });
-      } catch {
-        // Keep the last known ledger; the next tick tries again.
-      }
-    };
-    void tick();
-    const timer = setInterval(tick, intervalMs);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [network, intervalMs]);
+    if (shared) return;
+    const id = setInterval(() => {
+      setTick((t) => t + 1);
+    }, LEDGER_POLL_INTERVAL_MS);
 
-  return clock;
+    return () => clearInterval(id);
+  }, [shared]);
+
+  if (shared) return shared;
+  return { tick, client };
 }
