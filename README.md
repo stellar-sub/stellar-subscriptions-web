@@ -2,5 +2,5 @@
 
 ## Handsoff notes
 
-<!-- handsoff-issue-83 -->
-- #83: Tests for useTx phase transitions
+<!-- handsoff-issue-91 -->
+- #91: Page tests for /plans and /subscriptions states
