@@ -26,8 +26,8 @@ export function CommittedSpend({ subs }: { subs: Subscription[] }) {
         </ul>
       )}
       <p className="text-xs text-muted">
-        The most that can still be charged across your active and paused subscriptions, if every one were charged
-        at every opportunity. It&apos;s a ceiling, not a bill — you can lower it any time by pausing or cancelling.
+        The most that can still be charged across your active and paused subscriptions, if every one were charged at
+        every opportunity. It&apos;s a ceiling, not a bill — you can lower it any time by pausing or cancelling.
       </p>
     </section>
   );

@@ -36,8 +36,7 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
     passphrase: Networks.TESTNET,
     explorer: "https://stellar.expert/explorer/testnet",
     readAccount:
-      process.env.NEXT_PUBLIC_TESTNET_READ_ACCOUNT ||
-      "GBQHBOJHJ3SPU5TYNOABLKIXOZQFMN25ZNALA3QC46Q3I4IN5Q2KXZXI",
+      process.env.NEXT_PUBLIC_TESTNET_READ_ACCOUNT || "GBQHBOJHJ3SPU5TYNOABLKIXOZQFMN25ZNALA3QC46Q3I4IN5Q2KXZXI",
   },
   mainnet: {
     label: "Mainnet",
@@ -48,15 +47,12 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
   },
 };
 
-export const DEFAULT_NETWORK: Network =
-  process.env.NEXT_PUBLIC_DEFAULT_NETWORK === "mainnet" ? "mainnet" : "testnet";
+export const DEFAULT_NETWORK: Network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
-export const explorerTxUrl = (network: Network, hash: string) =>
-  `${NETWORKS[network].explorer}/tx/${hash}`;
+export const explorerTxUrl = (network: Network, hash: string) => `${NETWORKS[network].explorer}/tx/${hash}`;
 export const explorerAccountUrl = (network: Network, account: string) =>
   `${NETWORKS[network].explorer}/account/${account}`;
-export const explorerContractUrl = (network: Network, id: string) =>
-  `${NETWORKS[network].explorer}/contract/${id}`;
+export const explorerContractUrl = (network: Network, id: string) => `${NETWORKS[network].explorer}/contract/${id}`;
 
 const servers = new Map<Network, rpc.Server>();
 
@@ -93,11 +89,7 @@ export function explainError(raw: string, errors: ErrorTable): ContractError {
   const match = /Error\(Contract,\s*#(\d+)\)/.exec(raw);
   if (match) {
     const code = Number(match[1]);
-    return new ContractError(
-      errors[code] ?? `The contract rejected this (error ${code}).`,
-      raw,
-      code,
-    );
+    return new ContractError(errors[code] ?? `The contract rejected this (error ${code}).`, raw, code);
   }
   if (/balance|insufficient|trustline/i.test(raw)) {
     return new ContractError("The account doesn't hold enough of this token.", raw);
@@ -116,7 +108,7 @@ export const arg = {
 const RETRIES = 3;
 
 /** Public RPC nodes rate-limit bursts; retry those, never contract errors. */
-export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < RETRIES; attempt++) {
     try {
@@ -165,79 +157,6 @@ export async function readContract<T>(
   return (retval ? scValToNative(retval) : undefined) as T;
 }
 
-/**
- * Token metadata cache. Each distinct token otherwise costs three simulate
- * calls (symbol, name, decimals) on every page load. We persist the result in
- * `localStorage`, keyed by network + token address, with a short expiry so a
- * token's metadata can still be refreshed. Every storage access is guarded so
- * a missing / full / corrupt store never breaks the page.
- */
-export interface TokenMetadata {
-  symbol: string;
-  name: string;
-  decimals: number;
-}
-
-const TOKEN_CACHE_PREFIX = "handsoff:token:";
-const TOKEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-function tokenCacheKey(network: Network, tokenId: string): string {
-  return `${TOKEN_CACHE_PREFIX}${network}:${tokenId}`;
-}
-
-function getStorage(): Storage | null {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) return null;
-    return window.localStorage;
-  } catch {
-    return null;
-  }
-}
-
-/** Read cached token metadata, or `null` when absent, expired, or unreadable. */
-export function readTokenCache(network: Network, tokenId: string): TokenMetadata | null {
-  const storage = getStorage();
-  if (!storage) return null;
-  try {
-    const raw = storage.getItem(tokenCacheKey(network, tokenId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { data?: TokenMetadata; expires?: number };
-    if (!parsed || typeof parsed.expires !== "number" || parsed.expires < Date.now()) {
-      return null;
-    }
-    const data = parsed.data;
-    if (
-      !data ||
-      typeof data.symbol !== "string" ||
-      typeof data.name !== "string" ||
-      typeof data.decimals !== "number"
-    ) {
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-/** Persist token metadata. Failures (quota, disabled storage) are swallowed. */
-export function writeTokenCache(
-  network: Network,
-  tokenId: string,
-  data: TokenMetadata,
-): void {
-  const storage = getStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(
-      tokenCacheKey(network, tokenId),
-      JSON.stringify({ data, expires: Date.now() + TOKEN_CACHE_TTL_MS }),
-    );
-  } catch {
-    // Storage full or unavailable — caching is best-effort only.
-  }
-}
-
 /** Everything a write needs: who signs, on which network, and progress. */
 export interface WriteCtx {
   network: Network;
@@ -249,9 +168,9 @@ export interface WriteCtx {
 /**
  * Invoke a contract function as `ctx.source`. Simulates first, so a contract
  * rejection is reported before the wallet is ever asked to sign, then signs
- * through `ctx.sign` and submits. Returns the confirmed hash.
+ * through `ctx.sign`, submits, and waits for the ledger to confirm.
  */
-export async function writeContract(
+export async function invokeContract(
   ctx: WriteCtx,
   contractId: string,
   method: string,
@@ -259,40 +178,80 @@ export async function writeContract(
   errors: ErrorTable,
 ): Promise<TxResult> {
   const server = getServer(ctx.network);
-  const account = await withRetry(() => server.getAccount(ctx.source));
-  const tx = new TransactionBuilder(account, {
-    fee: BASE_FEE,
-    networkPassphrase: NETWORKS[ctx.network].passphrase,
-  })
+  const passphrase = NETWORKS[ctx.network].passphrase;
+
+  ctx.onPhase?.("building");
+  const account = await withRetry(() => server.getAccount(ctx.source)).catch((e: unknown) => {
+    throw new ContractError(
+      "This account isn't funded on this network yet, so it can't send transactions.",
+      e instanceof Error ? e.message : String(e),
+    );
+  });
+  const built = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: passphrase })
     .addOperation(new Contract(contractId).call(method, ...args))
-    .setTimeout(30)
+    .setTimeout(120)
     .build();
 
-  ctx.onPhase?.("simulating");
-  const sim = await withRetry(() => server.simulateTransaction(tx));
+  const sim = await withRetry(() => server.simulateTransaction(built));
   if (rpc.Api.isSimulationError(sim)) throw explainError(sim.error, errors);
-  rpc.assembleTransaction(tx, sim);
+  const prepared = rpc.assembleTransaction(built, sim).build();
 
   ctx.onPhase?.("signing");
-  const signed = await ctx.sign(tx.toXDR());
+  const signed = TransactionBuilder.fromXDR(await ctx.sign(prepared.toXDR()), passphrase);
 
   ctx.onPhase?.("submitting");
-  const sent = await withRetry(() => server.sendTransaction(TransactionBuilder.fromXDR(signed, NETWORKS[ctx.network].passphrase)));
-  if (sent.status === "ERROR") {
-    throw explainError(JSON.stringify(sent.errorResult ?? sent), errors);
+  const sent = await server.sendTransaction(signed);
+  if (sent.status === "ERROR" || sent.status === "TRY_AGAIN_LATER") {
+    throw new ContractError(
+      sent.status === "TRY_AGAIN_LATER"
+        ? "The network is busy. Nothing was charged — try again in a moment."
+        : "The network rejected the transaction. Nothing was changed.",
+      JSON.stringify(sent.errorResult ?? sent),
+    );
   }
 
   ctx.onPhase?.("confirming");
-  const hash = sent.hash;
-  for (let i = 0; i < 30; i++) {
-    const res = await withRetry(() => server.getTransaction(hash));
-    if (res.status === rpc.Api.GetTransactionStatus.SUCCESS) {
-      return { hash, network: ctx.network };
-    }
-    if (res.status === rpc.Api.GetTransactionStatus.FAILED) {
-      throw explainError(JSON.stringify(res), errors);
-    }
-    await sleep(1000);
+  const final = await confirm(server, sent.hash);
+  if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw new ContractError(
+      "The transaction was included but failed, so nothing changed on-chain.",
+      `${sent.hash}: ${JSON.stringify(final.status)}`,
+    );
   }
-  throw new ContractError("The transaction is taking longer than expected to confirm.");
+
+  let returnValue: unknown;
+  if (final.returnValue) {
+    try {
+      returnValue = scValToNative(final.returnValue);
+    } catch {
+      returnValue = undefined;
+    }
+  }
+  return { hash: sent.hash, returnValue };
+}
+
+async function confirm(server: rpc.Server, hash: string, timeoutMs = 60_000): Promise<rpc.Api.GetTransactionResponse> {
+  const started = Date.now();
+  for (;;) {
+    const res = await withRetry(() => server.getTransaction(hash));
+    if (res.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) return res;
+    if (Date.now() - started > timeoutMs) {
+      throw new ContractError(
+        "Still waiting for the network to confirm. It may yet succeed — check the explorer before retrying.",
+        hash,
+      );
+    }
+    await sleep(2_000);
+  }
+}
+
+export async function getLatestLedger(network: Network): Promise<number> {
+  const res = await withRetry(() => getServer(network).getLatestLedger());
+  return res.sequence;
+}
+
+/** Oldest and latest ledger the RPC node still holds events for. */
+export async function getEventWindow(network: Network): Promise<{ oldest: number; latest: number }> {
+  const health = await withRetry(() => getServer(network).getHealth());
+  return { oldest: health.oldestLedger, latest: health.latestLedger };
 }

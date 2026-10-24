@@ -180,9 +180,7 @@ describe("decoder fixtures", () => {
 
 describe("contract errors", () => {
   it("explains the invariant rejections in plain language", () => {
-    expect(explainError("HostError: Error(Contract, #12)", SUBSCRIPTION_ERRORS).message).toMatch(
-      /over the cap/,
-    );
+    expect(explainError("HostError: Error(Contract, #12)", SUBSCRIPTION_ERRORS).message).toMatch(/over the cap/);
     expect(explainError("Error(Contract, #11)", SUBSCRIPTION_ERRORS).message).toMatch(/Too early/);
     expect(explainError("Error(Contract, #14)", SUBSCRIPTION_ERRORS).message).toMatch(
       /No further charges can ever happen/,

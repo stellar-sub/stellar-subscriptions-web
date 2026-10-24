@@ -81,8 +81,8 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
           </dl>
 
           <p className="text-sm text-muted">
-            The merchant can charge at most once per interval and never more than the cap you choose. You can pause
-            or cancel from My subscriptions whenever you like.
+            The merchant can charge at most once per interval and never more than the cap you choose. You can pause or
+            cancel from My subscriptions whenever you like.
           </p>
         </section>
 

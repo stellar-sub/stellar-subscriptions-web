@@ -24,8 +24,8 @@ export function SiteFooter() {
         <div className="space-y-2">
           <p className="font-semibold text-fg">Stellar Subscriptions</p>
           <p className="text-muted">
-            The cap, the billing interval and cancellation are enforced by the smart contract, not by this
-            website. No one — including us — can charge you outside what you authorized.
+            The cap, the billing interval and cancellation are enforced by the smart contract, not by this website. No
+            one — including us — can charge you outside what you authorized.
           </p>
         </div>
 
@@ -58,7 +58,12 @@ export function SiteFooter() {
             {REPOS.map((repo) => (
               <li key={repo.name}>
                 {ORG ? (
-                  <a href={`https://github.com/${ORG}/${repo.name}`} target="_blank" rel="noreferrer" className="hover:text-fg">
+                  <a
+                    href={`https://github.com/${ORG}/${repo.name}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:text-fg"
+                  >
                     {repo.label}
                   </a>
                 ) : (
