@@ -13,7 +13,7 @@ import { SubStatus, type Subscription } from "@/types";
  */
 export function NextChargeCountdown({ sub }: { sub: Subscription }) {
   const { network } = useWallet();
-  const { sequence } = useLedger(network);
+  const { sequence, stale } = useLedger(network);
 
   if (sub.status === SubStatus.Cancelled) {
     return <Line label="Next charge" value="None — cancelled" />;
@@ -35,6 +35,7 @@ export function NextChargeCountdown({ sub }: { sub: Subscription }) {
         label="Next charge"
         value="Allowed now"
         note="The merchant may charge one period. Allowed doesn't mean it will happen on any set day."
+        stale={stale}
       />
     );
   }
@@ -43,11 +44,22 @@ export function NextChargeCountdown({ sub }: { sub: Subscription }) {
       label="Next charge"
       value={`Not before ${approxDuration(remaining)}`}
       note={`${formatLedgers(remaining)} from now. Before then the contract refuses any charge.`}
+      stale={stale}
     />
   );
 }
 
-function Line({ label, value, note }: { label: string; value: string; note?: string }) {
+function Line({
+  label,
+  value,
+  note,
+  stale,
+}: {
+  label: string;
+  value: string;
+  note?: string;
+  stale?: boolean;
+}) {
   return (
     <div className="text-sm">
       <div className="flex items-baseline justify-between gap-3">
@@ -55,6 +67,11 @@ function Line({ label, value, note }: { label: string; value: string; note?: str
         <span className="text-right font-medium text-fg">{value}</span>
       </div>
       {note && <p className="mt-0.5 text-right text-xs text-muted">{note}</p>}
+      {stale && (
+        <p className="mt-0.5 text-right text-xs text-amber-600" role="status">
+          Ledger data is out of date — this time may no longer be accurate.
+        </p>
+      )}
     </div>
   );
 }

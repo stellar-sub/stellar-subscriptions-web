@@ -4,6 +4,27 @@
  * Freighter returns `{ ..., error }` objects instead of throwing. These
  * helpers turn those into thrown `WalletError`s with messages a person can
  * act on, and map the wallet's network passphrase onto our `Network` union.
+ *
+ * TODO #47: Multi-wallet support with stellar-wallets-kit
+ *
+ * Design proposal: Abstract wallet operations into a WalletProvider interface
+ * to support multiple wallets (Freighter, Albedo, rStellar, etc.) via
+ * stellar-wallets-kit without duplicating wallet logic. Structure:
+ *
+ *   export interface WalletProvider {
+ *     name: string
+ *     isInstalled(): Promise<boolean>
+ *     hasAccess(): Promise<boolean>
+ *     connect(): Promise<string>
+ *     currentAddress(): Promise<string | null>
+ *     walletNetwork(): Promise<Network | null>
+ *     signTransaction(xdr, networkPassphrase, address): Promise<string>
+ *     watch(onChange): () => void
+ *   }
+ *
+ * Then adapt stellar-wallets-kit's API to this interface, allowing the UI
+ * to remain unchanged while supporting multiple wallets. Freighter remains
+ * the default; users can select alternatives from a dropdown.
  */
 
 import {

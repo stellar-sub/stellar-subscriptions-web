@@ -14,10 +14,14 @@ export interface WalletState {
   installed: boolean;
   connecting: boolean;
   error: string | null;
+  /** Account switched during a pending transaction. */
+  accountSwitched: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
   /** Choose the browsing network. Only applies while disconnected. */
   setNetwork: (network: Network) => void;
+  /** Clear the account switch warning. */
+  clearAccountSwitchWarning: () => void;
   /** A write context for the connected account. Throws a readable error if writes aren't possible. */
   writeCtx: (onPhase?: (phase: TxPhase) => void) => WriteCtx;
 }
