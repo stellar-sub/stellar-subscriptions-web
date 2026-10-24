@@ -1,7 +1,16 @@
+/**
+ * Soroban RPC engine: network configuration, read-only simulation, and the
+ * build → simulate → sign → submit → confirm pipeline for writes.
+ *
+ * Per-contract bindings live in `lib/contracts.ts`; this module knows nothing
+ * about subscriptions.
+ */
+
 import {
+  Account,
   Address,
+  BASE_FEE,
   Contract,
-  Keypair,
   Networks,
   TransactionBuilder,
   nativeToScVal,
@@ -9,199 +18,281 @@ import {
   scValToNative,
   xdr,
 } from "@stellar/stellar-sdk";
-import { NETWORK, type Network } from "./config";
+import type { Network, TxPhase, TxResult } from "@/types";
 
-export const RPC_URL =
-  process.env.NEXT_PUBLIC_RPC_URL ?? "https://soroban-testnet.stellar.org";
+interface NetworkConfig {
+  label: string;
+  rpcUrl: string;
+  passphrase: string;
+  explorer: string;
+  /** Funded account used only as the source of read simulations. */
+  readAccount: string | null;
+}
 
-/**
- * All configured RPC endpoints, in priority order. The primary is
- * `NEXT_PUBLIC_RPC_URL`; additional fallbacks come from a comma-separated
- * `NEXT_PUBLIC_RPC_URLS` list. Duplicates are dropped so a single endpoint
- * configured twice does not count as a fallback.
- */
-export const RPC_URLS: string[] = (() => {
-  const extra = (process.env.NEXT_PUBLIC_RPC_URLS ?? "")
-    .split(",")
-    .map((u) => u.trim())
-    .filter(Boolean);
-  const all = [RPC_URL, ...extra];
-  return all.filter((url, i) => all.indexOf(url) === i);
-})();
+export const NETWORKS: Record<Network, NetworkConfig> = {
+  testnet: {
+    label: "Testnet",
+    rpcUrl: process.env.NEXT_PUBLIC_TESTNET_RPC_URL || "https://soroban-testnet.stellar.org",
+    passphrase: Networks.TESTNET,
+    explorer: "https://stellar.expert/explorer/testnet",
+    readAccount:
+      process.env.NEXT_PUBLIC_TESTNET_READ_ACCOUNT ||
+      "GBQHBOJHJ3SPU5TYNOABLKIXOZQFMN25ZNALA3QC46Q3I4IN5Q2KXZXI",
+  },
+  mainnet: {
+    label: "Mainnet",
+    rpcUrl: process.env.NEXT_PUBLIC_MAINNET_RPC_URL || "https://mainnet.sorobanrpc.com",
+    passphrase: Networks.PUBLIC,
+    explorer: "https://stellar.expert/explorer/public",
+    readAccount: process.env.NEXT_PUBLIC_MAINNET_READ_ACCOUNT || null,
+  },
+};
 
-/** How many consecutive failures on one endpoint before we fail over. */
-export const FAILOVER_THRESHOLD = 2;
+export const DEFAULT_NETWORK: Network =
+  process.env.NEXT_PUBLIC_DEFAULT_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
-const servers = new Map<string, rpc.Server>();
+export const explorerTxUrl = (network: Network, hash: string) =>
+  `${NETWORKS[network].explorer}/tx/${hash}`;
+export const explorerAccountUrl = (network: Network, account: string) =>
+  `${NETWORKS[network].explorer}/account/${account}`;
+export const explorerContractUrl = (network: Network, id: string) =>
+  `${NETWORKS[network].explorer}/contract/${id}`;
 
-function serverFor(url: string): rpc.Server {
-  let server = servers.get(url);
+const servers = new Map<Network, rpc.Server>();
+
+export function getServer(network: Network): rpc.Server {
+  let server = servers.get(network);
   if (!server) {
+    const url = NETWORKS[network].rpcUrl;
     server = new rpc.Server(url, { allowHttp: url.startsWith("http://") });
-    servers.set(url, server);
+    servers.set(network, server);
   }
   return server;
 }
 
-/** Consecutive failure counts keyed by endpoint URL. */
-const failures = new Map<string, number>();
-
-/** Index of the endpoint currently preferred for new requests. */
-let preferred = 0;
-
-function recordSuccess(url: string) {
-  failures.set(url, 0);
-}
-
-function recordFailure(url: string) {
-  const count = (failures.get(url) ?? 0) + 1;
-  failures.set(url, count);
-  if (count >= FAILOVER_THRESHOLD) {
-    const idx = RPC_URLS.indexOf(url);
-    if (idx !== -1 && idx === preferred) {
-      preferred = (idx + 1) % RPC_URLS.length;
-    }
+/**
+ * A failure with a message safe to show a person, plus an optional raw
+ * `detail` for the console and an optional contract error `code`.
+ */
+export class ContractError extends Error {
+  readonly detail?: string;
+  readonly code?: number;
+  constructor(message: string, detail?: string, code?: number) {
+    super(message);
+    this.name = "ContractError";
+    this.detail = detail;
+    this.code = code;
   }
 }
 
-/** Endpoints in the order we should try them, starting from the preferred one. */
-function orderedEndpoints(): string[] {
-  return [...RPC_URLS.slice(preferred), ...RPC_URLS.slice(0, preferred)];
+/** Contract error code → sentence, one table per contract. */
+export type ErrorTable = Record<number, string>;
+
+/** Turn a raw simulation / host error into a sentence using `errors`. */
+export function explainError(raw: string, errors: ErrorTable): ContractError {
+  const match = /Error\(Contract,\s*#(\d+)\)/.exec(raw);
+  if (match) {
+    const code = Number(match[1]);
+    return new ContractError(
+      errors[code] ?? `The contract rejected this (error ${code}).`,
+      raw,
+      code,
+    );
+  }
+  if (/balance|insufficient|trustline/i.test(raw)) {
+    return new ContractError("The account doesn't hold enough of this token.", raw);
+  }
+  return new ContractError("The network couldn't complete this request.", raw);
 }
 
-function isRateLimit(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /\b429\b|rate.?limit|too many requests/i.test(msg);
+export const arg = {
+  address: (v: string): xdr.ScVal => new Address(v).toScVal(),
+  string: (v: string): xdr.ScVal => nativeToScVal(v, { type: "string" }),
+  u32: (v: number): xdr.ScVal => nativeToScVal(v, { type: "u32" }),
+  u64: (v: number | bigint): xdr.ScVal => nativeToScVal(BigInt(v), { type: "u64" }),
+  i128: (v: bigint): xdr.ScVal => nativeToScVal(v, { type: "i128" }),
+};
+
+const RETRIES = 3;
+
+/** Public RPC nodes rate-limit bursts; retry those, never contract errors. */
+export async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      const message = e instanceof Error ? e.message : String(e);
+      const transient = /429|rate.?limit|too many|timeout|network|fetch failed/i.test(message);
+      if (!transient || attempt === RETRIES - 1) throw e;
+      await sleep(300 * 2 ** attempt + Math.random() * 200);
+    }
+  }
+  throw lastError;
 }
 
-function sleep(ms: number) {
+function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Runs `fn` against the preferred endpoint, failing over to the next one after
- * repeated failures. Rate-limit (429) responses are retried on the same
- * endpoint with backoff before failing over.
+ * Call a contract function read-only by simulating it. Nothing is signed or
+ * submitted. Returns the decoded native value.
  */
-export async function withRpc<T>(fn: (server: rpc.Server) => Promise<T>): Promise<T> {
-  const endpoints = orderedEndpoints();
-  let lastError: unknown;
+export async function readContract<T>(
+  network: Network,
+  contractId: string,
+  method: string,
+  args: xdr.ScVal[],
+  errors: ErrorTable,
+): Promise<T> {
+  const source = NETWORKS[network].readAccount;
+  if (!source) {
+    throw new ContractError(`Reading from ${NETWORKS[network].label} isn't configured.`);
+  }
+  const tx = new TransactionBuilder(new Account(source, "0"), {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORKS[network].passphrase,
+  })
+    .addOperation(new Contract(contractId).call(method, ...args))
+    .setTimeout(30)
+    .build();
 
-  for (const url of endpoints) {
-    const server = serverFor(url);
-    const maxAttempts = 3;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      try {
-        const result = await fn(server);
-        recordSuccess(url);
-        return result;
-      } catch (err) {
-        lastError = err;
-        if (isRateLimit(err) && attempt < maxAttempts - 1) {
-          await sleep(250 * 2 ** attempt);
-          continue;
-        }
-        recordFailure(url);
-        break;
-      }
+  const sim = await withRetry(() => getServer(network).simulateTransaction(tx));
+  if (rpc.Api.isSimulationError(sim)) throw explainError(sim.error, errors);
+  const retval = sim.result?.retval;
+  return (retval ? scValToNative(retval) : undefined) as T;
+}
+
+/**
+ * Token metadata cache. Each distinct token otherwise costs three simulate
+ * calls (symbol, name, decimals) on every page load. We persist the result in
+ * `localStorage`, keyed by network + token address, with a short expiry so a
+ * token's metadata can still be refreshed. Every storage access is guarded so
+ * a missing / full / corrupt store never breaks the page.
+ */
+export interface TokenMetadata {
+  symbol: string;
+  name: string;
+  decimals: number;
+}
+
+const TOKEN_CACHE_PREFIX = "handsoff:token:";
+const TOKEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function tokenCacheKey(network: Network, tokenId: string): string {
+  return `${TOKEN_CACHE_PREFIX}${network}:${tokenId}`;
+}
+
+function getStorage(): Storage | null {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Read cached token metadata, or `null` when absent, expired, or unreadable. */
+export function readTokenCache(network: Network, tokenId: string): TokenMetadata | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(tokenCacheKey(network, tokenId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { data?: TokenMetadata; expires?: number };
+    if (!parsed || typeof parsed.expires !== "number" || parsed.expires < Date.now()) {
+      return null;
     }
+    const data = parsed.data;
+    if (
+      !data ||
+      typeof data.symbol !== "string" ||
+      typeof data.name !== "string" ||
+      typeof data.decimals !== "number"
+    ) {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
   }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
-export function getServer(): rpc.Server {
-  return serverFor(RPC_URLS[preferred]);
+/** Persist token metadata. Failures (quota, disabled storage) are swallowed. */
+export function writeTokenCache(
+  network: Network,
+  tokenId: string,
+  data: TokenMetadata,
+): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(
+      tokenCacheKey(network, tokenId),
+      JSON.stringify({ data, expires: Date.now() + TOKEN_CACHE_TTL_MS }),
+    );
+  } catch {
+    // Storage full or unavailable — caching is best-effort only.
+  }
 }
 
-export const server = getServer();
-
-export const networkPassphrase =
-  NETWORK === "mainnet" ? Networks.PUBLIC : Networks.TESTNET;
-
-export function addressToScVal(address: string): xdr.ScVal {
-  return new Address(address).toScVal();
+/** Everything a write needs: who signs, on which network, and progress. */
+export interface WriteCtx {
+  network: Network;
+  source: string;
+  sign: (xdr: string) => Promise<string>;
+  onPhase?: (phase: TxPhase) => void;
 }
 
-export function i128ToScVal(value: bigint): xdr.ScVal {
-  return nativeToScVal(value, { type: "i128" });
-}
-
-export function u32ToScVal(value: number): xdr.ScVal {
-  return nativeToScVal(value, { type: "u32" });
-}
-
-export function scValToBigInt(value: xdr.ScVal): bigint {
-  return scValToNative(value) as bigint;
-}
-
-export async function getAccount(publicKey: string) {
-  return withRpc((s) => s.getAccount(publicKey));
-}
-
-export async function simulate(
+/**
+ * Invoke a contract function as `ctx.source`. Simulates first, so a contract
+ * rejection is reported before the wallet is ever asked to sign, then signs
+ * through `ctx.sign` and submits. Returns the confirmed hash.
+ */
+export async function writeContract(
+  ctx: WriteCtx,
   contractId: string,
   method: string,
   args: xdr.ScVal[],
-  source: string,
-) {
-  return withRpc(async (s) => {
-    const account = await s.getAccount(source);
-    const contract = new Contract(contractId);
-    const tx = new TransactionBuilder(account, {
-      fee: "100",
-      networkPassphrase,
-    })
-      .addOperation(contract.call(method, ...args))
-      .setTimeout(30)
-      .build();
-    return s.simulateTransaction(tx);
-  });
-}
+  errors: ErrorTable,
+): Promise<TxResult> {
+  const server = getServer(ctx.network);
+  const account = await withRetry(() => server.getAccount(ctx.source));
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORKS[ctx.network].passphrase,
+  })
+    .addOperation(new Contract(contractId).call(method, ...args))
+    .setTimeout(30)
+    .build();
 
-export async function submit(
-  contractId: string,
-  method: string,
-  args: xdr.ScVal[],
-  signer: Keypair,
-) {
-  return withRpc(async (s) => {
-    const account = await s.getAccount(signer.publicKey());
-    const contract = new Contract(contractId);
-    const tx = new TransactionBuilder(account, {
-      fee: "100",
-      networkPassphrase,
-    })
-      .addOperation(contract.call(method, ...args))
-      .setTimeout(30)
-      .build();
-    const prepared = await s.prepareTransaction(tx);
-    prepared.sign(signer);
-    return s.sendTransaction(prepared);
-  });
-}
+  ctx.onPhase?.("simulating");
+  const sim = await withRetry(() => server.simulateTransaction(tx));
+  if (rpc.Api.isSimulationError(sim)) throw explainError(sim.error, errors);
+  rpc.assembleTransaction(tx, sim);
 
-export interface ExplainedError {
-  code?: number;
-  message: string;
-  detail: string;
-}
+  ctx.onPhase?.("signing");
+  const signed = await ctx.sign(tx.toXDR());
 
-export function explainError(
-  raw: string,
-  table: Record<number, string>,
-): ExplainedError {
-  const match = /Error\(Contract, #(\d+)\)/.exec(raw);
-  if (match) {
-    const code = Number(match[1]);
-    const known = table[code];
-    return {
-      code,
-      message: known ?? `The contract rejected this with error ${code}.`,
-      detail: raw,
-    };
+  ctx.onPhase?.("submitting");
+  const sent = await withRetry(() => server.sendTransaction(TransactionBuilder.fromXDR(signed, NETWORKS[ctx.network].passphrase)));
+  if (sent.status === "ERROR") {
+    throw explainError(JSON.stringify(sent.errorResult ?? sent), errors);
   }
-  return { message: raw, detail: raw };
-}
 
-export type { Network };
+  ctx.onPhase?.("confirming");
+  const hash = sent.hash;
+  for (let i = 0; i < 30; i++) {
+    const res = await withRetry(() => server.getTransaction(hash));
+    if (res.status === rpc.Api.GetTransactionStatus.SUCCESS) {
+      return { hash, network: ctx.network };
+    }
+    if (res.status === rpc.Api.GetTransactionStatus.FAILED) {
+      throw explainError(JSON.stringify(res), errors);
+    }
+    await sleep(1000);
+  }
+  throw new ContractError("The transaction is taking longer than expected to confirm.");
+}

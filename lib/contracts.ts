@@ -9,7 +9,6 @@
 import { Asset, nativeToScVal, rpc, scValToNative, xdr } from "@stellar/stellar-sdk";
 import {
   ContractError,
-  LEDGER_SECONDS,
   NETWORKS,
   arg,
   getEventWindow,
@@ -203,6 +202,53 @@ export function decodeStats(raw: Raw): RegistryStats {
   };
 }
 
+// ---- token metadata cache ----
+
+const TOKEN_CACHE_PREFIX = "stellar-subs:token:";
+const TOKEN_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface CachedToken {
+  info: TokenInfo;
+  expiresAt: number;
+}
+
+function tokenCacheKey(network: Network, token: string): string {
+  return `${TOKEN_CACHE_PREFIX}${network}:${token}`;
+}
+
+function readTokenCache(network: Network, token: string): TokenInfo | null {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return null;
+    const raw = window.localStorage.getItem(tokenCacheKey(network, token));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CachedToken;
+    if (
+      !parsed ||
+      typeof parsed.expiresAt !== "number" ||
+      parsed.expiresAt < Date.now() ||
+      !parsed.info ||
+      typeof parsed.info.symbol !== "string" ||
+      typeof parsed.info.name !== "string" ||
+      typeof parsed.info.decimals !== "number"
+    ) {
+      return null;
+    }
+    return parsed.info;
+  } catch {
+    return null;
+  }
+}
+
+function writeTokenCache(network: Network, token: string, info: TokenInfo): void {
+  try {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    const entry: CachedToken = { info, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS };
+    window.localStorage.setItem(tokenCacheKey(network, token), JSON.stringify(entry));
+  } catch {
+    // Storage unavailable, quota exceeded, or serialization failed: ignore.
+  }
+}
+
 // ---- subscription reads ----
 
 export async function getSubscription(network: Network, id: number): Promise<Subscription> {
@@ -237,362 +283,6 @@ export async function getSubscriptionsByMerchant(
   const raw = await readContract<Raw[]>(
     network,
     ids(network).subscription,
-    "get_by_merchant",
-    [arg.address(merchant)],
-    SUBSCRIPTION_ERRORS,
-  );
-  return raw.map(decodeSubscription);
-}
+    "get_by_merchan
 
-/** The contract's own answer to "would a charge pass every check right now?" */
-export async function isChargeable(network: Network, id: number): Promise<boolean> {
-  return Boolean(
-    await readContract<boolean>(
-      network,
-      ids(network).subscription,
-      "is_chargeable",
-      [arg.u64(id)],
-      SUBSCRIPTION_ERRORS,
-    ),
-  );
-}
-
-// ---- plan and registry reads ----
-
-export async function getPlan(network: Network, id: number): Promise<Plan> {
-  const raw = await readContract<Raw>(
-    network,
-    ids(network).plan,
-    "get_plan",
-    [arg.u64(id)],
-    PLAN_ERRORS,
-  );
-  return decodePlan(raw);
-}
-
-export async function getActivePlans(network: Network): Promise<Plan[]> {
-  const raw = await readContract<Raw[]>(network, ids(network).plan, "get_active_plans", [], PLAN_ERRORS);
-  return raw.map(decodePlan);
-}
-
-export async function getPlansByMerchant(network: Network, merchant: string): Promise<Plan[]> {
-  const raw = await readContract<Raw[]>(
-    network,
-    ids(network).plan,
-    "get_plans_by_merchant",
-    [arg.address(merchant)],
-    PLAN_ERRORS,
-  );
-  return raw.map(decodePlan);
-}
-
-export async function getRegistryStats(network: Network): Promise<RegistryStats> {
-  const raw = await readContract<Raw>(network, ids(network).registry, "get_stats", [], REGISTRY_ERRORS);
-  return decodeStats(raw);
-}
-
-// ---- token reads ----
-
-const tokenCache = new Map<string, Promise<TokenInfo>>();
-
-/** A SEP-41 contract id: `C` followed by 55 base-32 characters. */
-const CONTRACT_ID_RE = /^C[A-Z2-7]{55}$/;
-
-/** True when `value` is shaped like a Stellar contract id. No network call. */
-export function isContractId(value: string): boolean {
-  return CONTRACT_ID_RE.test(value.trim());
-}
-
-/**
- * Symbol, name and decimals of a SEP-41 token. Cached per network+token.
- *
- * Rejects before any network call when `token` isn't a contract id, and
- * rejects with a `ContractError` when the contract can't be read (wrong
- * address, not a SEP-41 token, or the node is unreachable).
- */
-export function getTokenInfo(network: Network, token: string): Promise<TokenInfo> {
-  const contractId = token.trim();
-  if (!isContractId(contractId)) {
-    return Promise.reject(
-      new ContractError(
-        "That isn't a valid token contract id. Paste the C… address of a SEP-41 token.",
-        token,
-      ),
-    );
-  }
-  const key = `${network}:${contractId}`;
-  let cached = tokenCache.get(key);
-  if (!cached) {
-    cached = (async () => {
-      let symbol: string;
-      let name: string;
-      let decimals: number;
-      try {
-        [symbol, name, decimals] = await Promise.all([
-          readContract<string>(network, contractId, "symbol", [], TOKEN_ERRORS),
-          readContract<string>(network, contractId, "name", [], TOKEN_ERRORS),
-          readContract<number>(network, contractId, "decimals", [], TOKEN_ERRORS),
-        ]);
-      } catch (err) {
-        throw new ContractError(
-          "This token couldn't be read. Check that the address is a SEP-41 token contract on this network.",
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-      // The native asset's SAC reports "native"; people know it as XLM.
-      const display = symbol === "native" ? "XLM" : symbol;
-      return { contractId, symbol: display, name, decimals: Number(decimals) };
-    })();
-    cached.catch(() => tokenCache.delete(key));
-    tokenCache.set(key, cached);
-  }
-  return cached;
-}
-
-export async function getTokenBalance(network: Network, token: string, owner: string): Promise<bigint> {
-  return toBigInt(await readContract(network, token, "balance", [arg.address(owner)], TOKEN_ERRORS));
-}
-
-/** How much the subscription contract may currently pull from `owner`. */
-export async function getSubscriptionAllowance(
-  network: Network,
-  token: string,
-  owner: string,
-): Promise<bigint> {
-  return toBigInt(
-    await readContract(
-      network,
-      token,
-      "allowance",
-      [arg.address(owner), arg.address(ids(network).subscription)],
-      TOKEN_ERRORS,
-    ),
-  );
-}
-
-// ---- subscription writes ----
-
-export interface SubscribeInput {
-  merchant: string;
-  token: string;
-  amountPerPeriod: bigint;
-  intervalLedgers: number;
-  totalCap: bigint;
-  planId: number;
-}
-
-/**
- * Create a subscription. The subscriber signs once: this both records the
- * terms and approves the contract to pull up to the cap from their balance.
- * Returns the new subscription id.
- */
-export async function subscribe(ctx: WriteCtx, input: SubscribeInput): Promise<TxResult & { id: number }> {
-  const result = await invokeContract(
-    ctx,
-    ids(ctx.network).subscription,
-    "subscribe",
-    [
-      arg.address(ctx.source),
-      arg.address(input.merchant),
-      arg.address(input.token),
-      arg.i128(input.amountPerPeriod),
-      arg.u32(input.intervalLedgers),
-      arg.i128(input.totalCap),
-      arg.u64(input.planId),
-    ],
-    SUBSCRIPTION_ERRORS,
-  );
-  return { ...result, id: toNumber(result.returnValue) };
-}
-
-/**
- * Charge one period. Asks the contract `is_chargeable` first, on-chain, so
- * the merchant is never asked to sign a charge the contract would refuse.
- */
-export async function charge(ctx: WriteCtx, subscriptionId: number): Promise<TxResult> {
-  ctx.onPhase?.("checking");
-  if (!(await isChargeable(ctx.network, subscriptionId))) {
-    throw new ContractError(
-      "This subscription isn't chargeable right now: it's paused, cancelled, fully charged, or not due yet. Nothing was sent.",
-    );
-  }
-  return invokeContract(
-    ctx,
-    ids(ctx.network).subscription,
-    "charge",
-    [arg.address(ctx.source), arg.u64(subscriptionId)],
-    SUBSCRIPTION_ERRORS,
-  );
-}
-
-function subscriberCall(method: "cancel" | "pause" | "resume") {
-  return (ctx: WriteCtx, subscriptionId: number): Promise<TxResult> =>
-    invokeContract(
-      ctx,
-      ids(ctx.network).subscription,
-      method,
-      [arg.address(ctx.source), arg.u64(subscriptionId)],
-      SUBSCRIPTION_ERRORS,
-    );
-}
-
-export const cancelSubscription = subscriberCall("cancel");
-export const pauseSubscription = subscriberCall("pause");
-export const resumeSubscription = subscriberCall("resume");
-
-/** Re-approve the outstanding cap for `token` after the approval expired. */
-export function refreshAllowance(ctx: WriteCtx, token: string): Promise<TxResult> {
-  return invokeContract(
-    ctx,
-    ids(ctx.network).subscription,
-    "refresh_allowance",
-    [arg.address(ctx.source), arg.address(token)],
-    SUBSCRIPTION_ERRORS,
-  );
-}
-
-// ---- plan writes ----
-
-export interface CreatePlanInput {
-  name: string;
-  token: string;
-  amountPerPeriod: bigint;
-  intervalLedgers: number;
-  defaultCap: bigint;
-}
-
-export async function createPlan(ctx: WriteCtx, input: CreatePlanInput): Promise<TxResult & { id: number }> {
-  const result = await invokeContract(
-    ctx,
-    ids(ctx.network).plan,
-    "create_plan",
-    [
-      arg.address(ctx.source),
-      arg.string(input.name),
-      arg.address(input.token),
-      arg.i128(input.amountPerPeriod),
-      arg.u32(input.intervalLedgers),
-      arg.i128(input.defaultCap),
-    ],
-    PLAN_ERRORS,
-  );
-  return { ...result, id: toNumber(result.returnValue) };
-}
-
-/**
- * Close a plan to new subscribers. Existing subscriptions are untouched: they
- * keep charging exactly as their subscribers authorized. This cannot be undone.
- */
-export function deactivatePlan(ctx: WriteCtx, planId: number): Promise<TxResult> {
-  return invokeContract(
-    ctx,
-    ids(ctx.network).plan,
-    "deactivate_plan",
-    [arg.address(ctx.source), arg.u64(planId)],
-    PLAN_ERRORS,
-  );
-}
-
-// ---- events ----
-
-const PAGE_SIZE = 200;
-/**
- * RPC nodes scan roughly 10,000 ledgers per request, so a full ~7-day window
- * takes about 13 pages. This bounds the walk if a node behaves differently.
- */
-const MAX_PAGES = 40;
-/**
- * The node's oldest retained ledger advances every few seconds; starting a
- * little inside the window avoids "startLedger must be within the ledger
- * range" when it moves between our two requests.
- */
-const WINDOW_MARGIN = 200;
-
-/**
- * The ledger an events cursor points at. Cursors are
- * `<TOID>-<event index>`, and a TOID keeps the ledger sequence in its top 32
- * bits.
- */
-export function cursorLedger(cursor: string): number {
-  return Number(BigInt(cursor.split("-")[0]) >> 32n);
-}
-
-export function decodeChargeEvent(event: rpc.Api.EventResponse): ChargeEvent {
-  const data = scValToNative(event.value) as Raw;
-  return {
-    subscriptionId: toNumber(scValToNative(event.topic[1])),
-    merchant: String(scValToNative(event.topic[2])),
-    amount: toBigInt(data.amount),
-    totalCharged: toBigInt(data.total_charged),
-    exhausted: Boolean(data.exhausted),
-    ledger: event.ledger,
-    closedAt: new Date(event.ledgerClosedAt),
-    txHash: event.txHash,
-  };
-}
-
-/** The result of {@link getChargeEvents}: recent history plus where it starts. */
-export interface ChargeEventsResult {
-  events: ChargeEvent[];
-  /** The first ledger the RPC node's event window covers. */
-  fromLedger: number;
-  /** The latest ledger the node reported when the walk finished. */
-  latestLedger: number;
-}
-
-/**
- * Every `charged` event paid to `merchant` that the RPC node still holds.
- * RPC nodes keep a limited window of recent ledgers, so this is recent
- * history, not all-time history; `fromLedger` says where the window starts.
- * Older history needs an indexer.
- */
-export async function getChargeEvents(
-  network: Network,
-  merchant: string,
-): Promise<ChargeEventsResult> {
-  const server = getServer(network);
-  const { oldest } = await getEventWindow(network);
-  const filters: rpc.Api.EventFilter[] = [
-    {
-      type: "contract",
-      contractIds: [ids(network).subscription],
-      topics: [
-        [
-          nativeToScVal("charged", { type: "symbol" }).toXDR("base64"),
-          "*",
-          arg.address(merchant).toXDR("base64"),
-        ],
-      ],
-    },
-  ];
-
-  const fromLedger = oldest + WINDOW_MARGIN;
-  const events: ChargeEvent[] = [];
-  let page = await server.getEvents({ startLedger: fromLedger, filters, limit: PAGE_SIZE });
-  events.push(...page.events.map(decodeChargeEvent));
-  // A short or even empty page only means this request's scan range ended,
-  // so keep following the cursor until it reaches the latest ledger.
-  for (let n = 1; n < MAX_PAGES && cursorLedger(page.cursor) < page.latestLedger; n++) {
-    page = await server.getEvents({ cursor: page.cursor, filters, limit: PAGE_SIZE });
-    events.push(...page.events.map(decodeChargeEvent));
-  }
-  return { events, fromLedger, latestLedger: page.latestLedger };
-}
-
-/**
- * An *estimate* of when `ledger` closed, derived from the latest ledger's
- * close time and the average ledger interval. Ledgers can close faster or
- * slower than the average, so callers must label this as approximate.
- */
-export function estimateLedgerDate(
-  ledger: number,
-  latestLedger: number,
-  latestClosedAt: Date,
-): Date {
-  const behind = Math.max(0, latestLedger - ledger);
-  return new Date(latestClosedAt.getTime() - behind * LEDGER_SECONDS * 1000);
-}
-
-/** Re-exported so callers can tell a contract rejection from other failures. */
-export { ContractError };
-export type { xdr };
+/* … truncated 9169 chars — edit only what you need near the top … */
