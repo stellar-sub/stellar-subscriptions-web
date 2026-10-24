@@ -1,5 +1,6 @@
 "use client";
 
+import { useLedger } from "@/hooks/useLedger";
 import { useWallet } from "@/hooks/useWallet";
 import { contractsFor } from "@/lib/contracts";
 import { shortAddress } from "@/lib/format";
@@ -15,6 +16,7 @@ const REPOS = [
 export function SiteFooter() {
   const { network } = useWallet();
   const deployed = contractsFor(network);
+  const { latestLedger, error } = useLedger();
 
   return (
     <footer className="border-t border-line">
@@ -67,6 +69,22 @@ export function SiteFooter() {
               </li>
             ))}
           </ul>
+        </div>
+      </div>
+
+      <div className="border-t border-line">
+        <div className="mx-auto flex max-w-page flex-wrap items-center gap-2 px-4 py-3 text-xs text-muted sm:px-6">
+          <span
+            aria-hidden="true"
+            className={`inline-block h-2 w-2 rounded-full ${error ? "bg-red-500" : "bg-emerald-500"}`}
+          />
+          <span aria-live="polite" aria-atomic="true">
+            {error
+              ? "RPC degraded — retrying"
+              : latestLedger !== null
+                ? `RPC healthy · ledger ${latestLedger}`
+                : "RPC connecting…"}
+          </span>
         </div>
       </div>
     </footer>
