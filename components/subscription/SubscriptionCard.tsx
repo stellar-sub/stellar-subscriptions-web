@@ -1,53 +1,86 @@
-"use client";
-
 import Link from "next/link";
-import { describeInterval } from "@/lib/format";
-import { AddressLink } from "@/components/ui/AddressLink";
-import { TokenAmount } from "@/components/ui/TokenAmount";
-import type { Subscription } from "@/types";
-import { CancelButton } from "./CancelButton";
-import { CapProgress } from "./CapProgress";
-import { NextChargeCountdown } from "./NextChargeCountdown";
-import { PauseResumeButton } from "./PauseResumeButton";
-import { SubStatusBadge } from "./SubStatusBadge";
+import { Subscription } from "@/lib/types";
+import { formatCurrency, formatDate } from "@/lib/format";
+import CancelButton from "./CancelButton";
+import PauseButton from "./PauseButton";
 
-/**
- * One subscription as its subscriber sees it. Pause and cancel sit on the
- * card itself, so stopping a subscription is never more than one click away.
- */
-export function SubscriptionCard({ sub, onChanged }: { sub: Subscription; onChanged: () => void }) {
+type Props = {
+  subscription: Subscription;
+};
+
+export default function SubscriptionCard({ subscription }: Props) {
+  const {
+    id,
+    planName,
+    merchantName,
+    amount,
+    currency,
+    interval,
+    nextChargeAt,
+    status,
+  } = subscription;
+
+  const isActive = status === "active";
+  const isPaused = status === "paused";
+
   return (
-    <article className="card space-y-5 p-5" aria-label={`Subscription ${sub.id}`}>
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold text-fg">
-            <TokenAmount token={sub.token} value={sub.amountPerPeriod} />
-            <span className="ml-2 text-sm font-normal text-muted">{describeInterval(sub.intervalLedgers)}</span>
+    <article
+      className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm focus-within:ring-2 focus-within:ring-blue-600"
+      aria-labelledby={`subscription-${id}-title`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3
+            id={`subscription-${id}-title`}
+            className="text-base font-semibold text-gray-900"
+          >
+            <Link
+              href={`/plans/${id}`}
+              className="rounded underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+            >
+              {planName}
+            </Link>
           </h3>
-          <p className="text-sm text-muted">
-            to <AddressLink address={sub.merchant} />
-            {sub.planId > 0 && (
-              <>
-                {" "}
-                ·{" "}
-                <Link href={`/plans/${sub.planId}`} className="hover:text-fg hover:underline">
-                  plan #{sub.planId}
-                </Link>
-              </>
-            )}
-            <span> · subscription #{sub.id}</span>
-          </p>
+          <p className="text-sm text-gray-600">{merchantName}</p>
         </div>
-        <SubStatusBadge status={sub.status} />
-      </header>
+        <span
+          className={
+            isActive
+              ? "rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
+              : isPaused
+                ? "rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800"
+                : "rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700"
+          }
+        >
+          {status}
+        </span>
+      </div>
 
-      <CapProgress sub={sub} />
-      <NextChargeCountdown sub={sub} />
+      <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
+        <div>
+          <dt className="text-gray-500">Amount</dt>
+          <dd className="font-medium text-gray-900">
+            {formatCurrency(amount, currency)} / {interval}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-gray-500">Next charge</dt>
+          <dd className="font-medium text-gray-900">
+            {isActive ? formatDate(nextChargeAt) : "—"}
+          </dd>
+        </div>
+      </dl>
 
-      <footer className="flex flex-wrap items-start gap-3 border-t border-line pt-4">
-        <PauseResumeButton sub={sub} onDone={onChanged} />
-        <CancelButton sub={sub} onDone={onChanged} />
-      </footer>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={`/plans/${id}`}
+          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+        >
+          View plan
+        </Link>
+        {isActive && <PauseButton subscriptionId={id} />}
+        {(isActive || isPaused) && <CancelButton subscriptionId={id} />}
+      </div>
     </article>
   );
 }

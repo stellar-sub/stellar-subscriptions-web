@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { axe } from "vitest-axe";
 import { WalletContext, type WalletState } from "@/hooks/useWallet";
 import { subscribe } from "@/lib/contracts";
 import type { Plan } from "@/types";
@@ -51,6 +52,11 @@ const confirmButton = () => screen.getByRole("button", { name: "Authorize and su
 
 describe("SubscribeForm", () => {
   beforeEach(() => vi.mocked(subscribe).mockClear());
+
+  it("has no axe violations", async () => {
+    const { container } = renderForm();
+    expect(await axe(container)).toHaveNoViolations();
+  });
 
   it("shows the authorization summary before any subscribe action is possible", () => {
     renderForm();

@@ -34,6 +34,31 @@ export function ledgersUntilNextCharge(sub: Subscription, currentLedger: number)
   return sub.nextChargeLedger - currentLedger;
 }
 
+/**
+ * Whether the ledger clock alone rules a charge in: the subscription is live
+ * (active, not final) and its next charge ledger has been reached. This is a
+ * cheap pre-filter only — the contract's `is_chargeable` remains the final
+ * authority.
+ */
+export function isDueByLedger(sub: Subscription, currentLedger: number): boolean {
+  return sub.status === SubStatus.Active && ledgersUntilNextCharge(sub, currentLedger) <= 0;
+}
+
+/**
+ * Subscriptions that may be chargeable right now. Rows that are clearly not
+ * due (paused, final, or whose next charge ledger is still in the future) are
+ * filtered out by the shared ledger value and never sent to the contract.
+ * The remainder is confirmed with `isChargeable` (the contract's
+ * `is_chargeable`), which stays the final authority.
+ */
+export function dueSubscriptions(
+  subs: Subscription[],
+  currentLedger: number,
+  isChargeable: (sub: Subscription) => boolean,
+): Subscription[] {
+  return subs.filter((sub) => isDueByLedger(sub, currentLedger) && isChargeable(sub));
+}
+
 /** Sum a list of subscriptions' remaining chargeable amounts, per token. */
 export function committedByToken(subs: Subscription[]): Map<string, bigint> {
   const totals = new Map<string, bigint>();

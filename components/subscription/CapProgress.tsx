@@ -30,7 +30,7 @@ export function CapProgress({ sub }: { sub: Subscription }) {
         className="h-2.5 overflow-hidden rounded-full bg-raised"
       >
         <div
-          className={`h-full rounded-full transition-all ${ended ? "bg-muted" : percent >= 100 ? "bg-warn" : "bg-brand"}`}
+          className={`h-full rounded-full transition-all motion-reduce:transition-none ${ended ? "bg-muted" : percent >= 100 ? "bg-warn" : "bg-brand"}`}
           style={{ width: `${percent}%` }}
         />
       </div>

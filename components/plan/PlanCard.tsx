@@ -1,14 +1,28 @@
+"use client";
+
 import Link from "next/link";
 import { describeInterval, maxCharges, pluralize, shortAddress } from "@/lib/format";
 import { TokenAmount } from "@/components/ui/TokenAmount";
+import { usePlan } from "@/hooks/usePlans";
+import { useToken } from "@/hooks/useToken";
 import type { Plan } from "@/types";
 import { PlanBadge } from "./PlanBadge";
 
 export function PlanCard({ plan }: { plan: Plan }) {
+  const { prefetch: prefetchPlan } = usePlan(plan.id);
+  const { prefetch: prefetchToken } = useToken(plan.token);
+
+  const prefetch = () => {
+    prefetchPlan();
+    prefetchToken();
+  };
+
   return (
     <Link
       href={`/plans/${plan.id}`}
       className="card group flex flex-col gap-4 p-5 transition hover:border-brand/50"
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
     >
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-semibold text-fg group-hover:text-brand">{plan.name}</h3>

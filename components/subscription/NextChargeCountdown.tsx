@@ -2,7 +2,7 @@
 
 import { useLedger } from "@/hooks/useLedger";
 import { useWallet } from "@/hooks/useWallet";
-import { approxDuration, formatLedgers } from "@/lib/format";
+import { approxDate, approxDuration, formatLedgers } from "@/lib/format";
 import { ledgersUntilNextCharge } from "@/lib/subscription";
 import { SubStatus, type Subscription } from "@/types";
 
@@ -42,7 +42,7 @@ export function NextChargeCountdown({ sub }: { sub: Subscription }) {
     <Line
       label="Next charge"
       value={`Not before ${approxDuration(remaining)}`}
-      note={`${formatLedgers(remaining)} from now. Before then the contract refuses any charge.`}
+      note={`Estimated ${approxDate(remaining)}. ${formatLedgers(remaining)} from now. Before then the contract refuses any charge.`}
     />
   );
 }

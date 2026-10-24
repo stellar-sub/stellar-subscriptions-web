@@ -21,7 +21,14 @@ export function PauseResumeButton({ sub, onDone }: { sub: Subscription; onDone: 
 
   return (
     <div className="space-y-2">
-      <button type="button" className="btn-secondary" onClick={() => void toggle()} disabled={tx.pending}>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={() => void toggle()}
+        disabled={tx.pending}
+        aria-busy={tx.pending}
+        aria-label={paused ? "Resume subscription" : "Pause subscription"}
+      >
         {tx.pending ? (paused ? "Resuming…" : "Pausing…") : paused ? "Resume" : "Pause"}
       </button>
       {!paused && tx.phase === "idle" && (

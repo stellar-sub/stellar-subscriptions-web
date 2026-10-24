@@ -73,6 +73,35 @@ export interface ChargeEvent {
   txHash: string;
 }
 
+/** One calendar day's charges in a single token. `day` is `YYYY-MM-DD` (UTC). */
+export interface RevenueDayBucket {
+  day: string;
+  total: bigint;
+}
+
+/**
+ * Revenue for one token only. Amounts in different tokens are never added
+ * together, so there is deliberately no cross-token total type.
+ */
+export interface TokenRevenue {
+  token: string;
+  info: TokenInfo;
+  /** Per-day totals, ascending by day. */
+  buckets: RevenueDayBucket[];
+  /** Sum of this token's events only. */
+  total: bigint;
+}
+
+/**
+ * The `charged` events `getChargeEvents` could read, plus the first ledger it
+ * scanned. RPC nodes keep only a limited window of events, so anything before
+ * `fromLedger` is not included.
+ */
+export interface ChargeHistory {
+  events: ChargeEvent[];
+  fromLedger: number;
+}
+
 export type TxPhase =
   | "idle"
   | "checking"

@@ -5,6 +5,7 @@ import { useSubscriptions } from "@/hooks/useSubscriptions";
 import { sortForDisplay } from "@/lib/subscription";
 import { CommittedSpend } from "@/components/subscription/CommittedSpend";
 import { SubscriptionCard } from "@/components/subscription/SubscriptionCard";
+import { AllowanceBanner } from "@/components/subscription/AllowanceBanner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingBlock } from "@/components/ui/Spinner";
@@ -51,11 +52,14 @@ function Subscriptions({ address }: { address: string }) {
   const ordered = sortForDisplay(subs.data);
   return (
     <div className="space-y-6">
+      <AllowanceBanner subs={subs.data} />
       <CommittedSpend subs={subs.data} />
       <ul className="grid gap-4 lg:grid-cols-2">
         {ordered.map((sub) => (
           <li key={sub.id}>
-            <SubscriptionCard sub={sub} onChanged={subs.reload} />
+            <Link href={`/subscriptions/${sub.id}`} className="block">
+              <SubscriptionCard sub={sub} onChanged={subs.reload} />
+            </Link>
           </li>
         ))}
       </ul>
