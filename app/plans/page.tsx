@@ -43,8 +43,8 @@ export default function PlansPage() {
       <header className="space-y-2">
         <h1 className="text-3xl font-semibold text-fg">Plans</h1>
         <p className="max-w-2xl text-sm text-muted">
-          Every plan currently accepting subscribers. Opening a plan shows exactly what you&apos;d authorize before
-          you sign anything.
+          Every plan currently accepting subscribers. Opening a plan shows exactly what you&apos;d authorize before you
+          sign anything.
         </p>
       </header>
 

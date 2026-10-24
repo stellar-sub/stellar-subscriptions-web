@@ -37,7 +37,10 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-line bg-bg/85 backdrop-blur">
       <div className="mx-auto flex max-w-page items-center gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2 font-semibold text-fg">
-          <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-fg">
+          <span
+            aria-hidden
+            className="flex h-7 w-7 items-center justify-center rounded-lg bg-brand text-sm font-bold text-brand-fg"
+          >
             ↻
           </span>
           <span className="hidden sm:inline">Stellar Subscriptions</span>

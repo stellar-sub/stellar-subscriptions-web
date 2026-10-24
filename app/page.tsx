@@ -40,8 +40,8 @@ export default function LandingPage() {
           Recurring payments on Stellar, on your terms
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-muted">
-          Authorize a spending cap once. Cancel anytime. A merchant can never charge more than you approved,
-          or more often than you agreed — the smart contract won&apos;t let them.
+          Authorize a spending cap once. Cancel anytime. A merchant can never charge more than you approved, or more
+          often than you agreed — the smart contract won&apos;t let them.
         </p>
         <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link href="/plans" className="btn-primary w-full px-6 py-3 text-base sm:w-auto">
@@ -83,8 +83,8 @@ export default function LandingPage() {
             What the contract guarantees
           </h2>
           <p className="max-w-2xl text-sm text-muted">
-            These rules live in the subscription contract on Stellar, not in this website. Each one is proven by
-            tests that were written before the contract itself.
+            These rules live in the subscription contract on Stellar, not in this website. Each one is proven by tests
+            that were written before the contract itself.
           </p>
         </div>
         <div className="grid gap-4 md:grid-cols-3">

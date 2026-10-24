@@ -75,7 +75,10 @@ export function TxProgress({
             const done = i < current;
             const active = i === current;
             return (
-              <li key={step.phase} className={`flex items-center gap-2 ${active ? "text-fg" : done ? "text-muted" : "text-muted/60"}`}>
+              <li
+                key={step.phase}
+                className={`flex items-center gap-2 ${active ? "text-fg" : done ? "text-muted" : "text-muted/60"}`}
+              >
                 <span className="flex h-4 w-4 items-center justify-center">
                   {active ? <Spinner label={step.label} /> : done ? "✓" : "·"}
                 </span>
@@ -91,7 +94,12 @@ export function TxProgress({
           <p className="text-ok">✓ {successText}</p>
           <div className="flex items-center gap-3">
             {hash && (
-              <a href={explorerTxUrl(network, hash)} target="_blank" rel="noreferrer" className="text-muted underline-offset-2 hover:text-fg hover:underline">
+              <a
+                href={explorerTxUrl(network, hash)}
+                target="_blank"
+                rel="noreferrer"
+                className="text-muted underline-offset-2 hover:text-fg hover:underline"
+              >
                 View transaction
               </a>
             )}

@@ -69,7 +69,9 @@ export function CapSelector({
         The most this subscription can ever take from you, in total. You can always cancel sooner.
       </p>
 
-      <label className={`card flex cursor-pointer items-start gap-3 p-4 ${mode === "default" ? "border-brand/60" : ""}`}>
+      <label
+        className={`card flex cursor-pointer items-start gap-3 p-4 ${mode === "default" ? "border-brand/60" : ""}`}
+      >
         <input
           type="radio"
           name="cap"

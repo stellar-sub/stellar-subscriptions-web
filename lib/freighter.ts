@@ -82,9 +82,7 @@ export async function hasAccess(): Promise<boolean> {
 /** Ask the user to connect and return their address. */
 export async function connect(): Promise<string> {
   if (!(await isFreighterInstalled())) {
-    throw new WalletError(
-      "Freighter isn't installed. Get it at freighter.app, then reload this page.",
-    );
+    throw new WalletError("Freighter isn't installed. Get it at freighter.app, then reload this page.");
   }
   const res = await requestAccess();
   if (res.error) throw new WalletError(walletMessage(res.error, "Couldn't connect to Freighter."));
@@ -117,11 +115,7 @@ export async function walletNetwork(): Promise<Network | null> {
 }
 
 /** Ask Freighter to sign a transaction envelope; returns the signed XDR. */
-export async function signWithFreighter(
-  xdr: string,
-  networkPassphrase: string,
-  address: string,
-): Promise<string> {
+export async function signWithFreighter(xdr: string, networkPassphrase: string, address: string): Promise<string> {
   const res = await signTransaction(xdr, { networkPassphrase, address });
   if (res.error) throw new WalletError(walletMessage(res.error, "Freighter couldn't sign."));
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");

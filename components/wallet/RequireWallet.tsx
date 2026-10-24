@@ -6,13 +6,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 
 /** Renders `children` with the connected address, or a prompt to connect. */
-export function RequireWallet({
-  purpose,
-  children,
-}: {
-  purpose: string;
-  children: (address: string) => ReactNode;
-}) {
+export function RequireWallet({ purpose, children }: { purpose: string; children: (address: string) => ReactNode }) {
   const { address, installed, connecting, error, connect } = useWallet();
 
   if (address) return <>{children(address)}</>;

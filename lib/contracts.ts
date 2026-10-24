@@ -43,12 +43,9 @@ const DEPLOYMENTS: Record<Network, ContractIds | null> = {
     subscription:
       process.env.NEXT_PUBLIC_TESTNET_SUBSCRIPTION_CONTRACT ||
       "CAW5H4BH5VXWR23DFUVMY45TL7JSMTDZTH3E7LMMXW5LZ7FMDL33KXMM",
-    plan:
-      process.env.NEXT_PUBLIC_TESTNET_PLAN_CONTRACT ||
-      "CDKFRKPA2EIYMW2GX2FY4ZFQ2VAFS5UZD5BHAZLCIGRA7N24N2DFAYN3",
+    plan: process.env.NEXT_PUBLIC_TESTNET_PLAN_CONTRACT || "CDKFRKPA2EIYMW2GX2FY4ZFQ2VAFS5UZD5BHAZLCIGRA7N24N2DFAYN3",
     registry:
-      process.env.NEXT_PUBLIC_TESTNET_REGISTRY_CONTRACT ||
-      "CB7HBXFNBLUSBY3SMIYUPVTE3JZTISYRMZB7XXPUC3ZPLIDNPTKUX645",
+      process.env.NEXT_PUBLIC_TESTNET_REGISTRY_CONTRACT || "CB7HBXFNBLUSBY3SMIYUPVTE3JZTISYRMZB7XXPUC3ZPLIDNPTKUX645",
   },
   mainnet:
     process.env.NEXT_PUBLIC_MAINNET_SUBSCRIPTION_CONTRACT &&
@@ -216,10 +213,7 @@ export async function getSubscription(network: Network, id: number): Promise<Sub
   return decodeSubscription(raw);
 }
 
-export async function getSubscriptionsBySubscriber(
-  network: Network,
-  subscriber: string,
-): Promise<Subscription[]> {
+export async function getSubscriptionsBySubscriber(network: Network, subscriber: string): Promise<Subscription[]> {
   const raw = await readContract<Raw[]>(
     network,
     ids(network).subscription,
@@ -230,10 +224,7 @@ export async function getSubscriptionsBySubscriber(
   return raw.map(decodeSubscription);
 }
 
-export async function getSubscriptionsByMerchant(
-  network: Network,
-  merchant: string,
-): Promise<Subscription[]> {
+export async function getSubscriptionsByMerchant(network: Network, merchant: string): Promise<Subscription[]> {
   const raw = await readContract<Raw[]>(
     network,
     ids(network).subscription,
@@ -260,13 +251,7 @@ export async function isChargeable(network: Network, id: number): Promise<boolea
 // ---- plan and registry reads ----
 
 export async function getPlan(network: Network, id: number): Promise<Plan> {
-  const raw = await readContract<Raw>(
-    network,
-    ids(network).plan,
-    "get_plan",
-    [arg.u64(id)],
-    PLAN_ERRORS,
-  );
+  const raw = await readContract<Raw>(network, ids(network).plan, "get_plan", [arg.u64(id)], PLAN_ERRORS);
   return decodePlan(raw);
 }
 
@@ -354,11 +339,7 @@ export async function getTokenBalance(network: Network, token: string, owner: st
 }
 
 /** How much the subscription contract may currently pull from `owner`. */
-export async function getSubscriptionAllowance(
-  network: Network,
-  token: string,
-  owner: string,
-): Promise<bigint> {
+export async function getSubscriptionAllowance(network: Network, token: string, owner: string): Promise<bigint> {
   return toBigInt(
     await readContract(
       network,
@@ -557,11 +538,7 @@ export async function getChargeEvents(
       type: "contract",
       contractIds: [ids(network).subscription],
       topics: [
-        [
-          nativeToScVal("charged", { type: "symbol" }).toXDR("base64"),
-          "*",
-          arg.address(merchant).toXDR("base64"),
-        ],
+        [nativeToScVal("charged", { type: "symbol" }).toXDR("base64"), "*", arg.address(merchant).toXDR("base64")],
       ],
     },
   ];

@@ -35,8 +35,8 @@ export function PlatformStats() {
         ))}
       </dl>
       <p className="mt-2 text-xs text-muted">
-        Read live from the registry contract on {NETWORKS[network].label}. &ldquo;Charged so far&rdquo; adds up
-        raw amounts across every token, shown with 7 decimals — an activity measure, not a currency total.
+        Read live from the registry contract on {NETWORKS[network].label}. &ldquo;Charged so far&rdquo; adds up raw
+        amounts across every token, shown with 7 decimals — an activity measure, not a currency total.
       </p>
     </div>
   );
