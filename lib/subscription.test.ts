@@ -2,6 +2,7 @@ import { SubStatus, type Subscription } from "@/types";
 import {
   chargesLeft,
   committedByToken,
+  filterDueSubscriptions,
   isFinal,
   ledgersUntilNextCharge,
   remainingCap,
@@ -81,6 +82,54 @@ describe("committed spend", () => {
     expect(totals.get("CXLM")).toBe(1_000n + 100n);
     expect(totals.get("CUSD")).toBe(500n);
     expect(totals.size).toBe(2);
+  });
+});
+
+describe("due subscriptions", () => {
+  it("never asks the contract about rows that are not yet due", async () => {
+    const checker = jest.fn(async () => true);
+    const due = await filterDueSubscriptions(
+      [
+        sub({ id: 1, nextChargeLedger: 2_000 }),
+        sub({ id: 2, nextChargeLedger: 1_000 }),
+      ],
+      1_000,
+      checker,
+    );
+    expect(checker).toHaveBeenCalledTimes(1);
+    expect(checker).toHaveBeenCalledWith(expect.objectContaining({ id: 2 }));
+    expect(due.map((s) => s.id)).toEqual([2]);
+  });
+
+  it("keeps the contract as the final authority", async () => {
+    const checker = jest.fn(async (s: Subscription) => s.id === 1);
+    const due = await filterDueSubscriptions(
+      [
+        sub({ id: 1, nextChargeLedger: 1_000 }),
+        sub({ id: 2, nextChargeLedger: 1_000 }),
+      ],
+      1_000,
+      checker,
+    );
+    expect(checker).toHaveBeenCalledTimes(2);
+    expect(due.map((s) => s.id)).toEqual([1]);
+  });
+
+  it("excludes paused, cancelled and exhausted rows without asking the contract", async () => {
+    const checker = jest.fn(async () => true);
+    const due = await filterDueSubscriptions(
+      [
+        sub({ id: 1, status: SubStatus.Paused, nextChargeLedger: 1_000 }),
+        sub({ id: 2, status: SubStatus.Cancelled, nextChargeLedger: 1_000 }),
+        sub({ id: 3, status: SubStatus.Exhausted, nextChargeLedger: 1_000 }),
+        sub({ id: 4, nextChargeLedger: 1_000 }),
+      ],
+      1_000,
+      checker,
+    );
+    expect(checker).toHaveBeenCalledTimes(1);
+    expect(checker).toHaveBeenCalledWith(expect.objectContaining({ id: 4 }));
+    expect(due.map((s) => s.id)).toEqual([4]);
   });
 });
 

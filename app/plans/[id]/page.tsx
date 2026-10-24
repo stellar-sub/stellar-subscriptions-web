@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingBlock } from "@/components/ui/Spinner";
 import { TokenAmount } from "@/components/ui/TokenAmount";
 import { PlanBadge } from "@/components/plan/PlanBadge";
+import { PlanShare } from "@/components/plan/PlanShare";
 import { SubscribeForm } from "@/components/subscribe/SubscribeForm";
 
 export default function PlanDetailPage({ params }: { params: { id: string } }) {
@@ -33,7 +34,7 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
         <section className="space-y-6">
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold text-fg">{p.name}</h1>
+              <h1 className="min-w-0 break-words text-3xl font-semibold text-fg">{p.name}</h1>
               <PlanBadge active={p.active} />
             </div>
             <p className="text-sm text-muted">
@@ -72,7 +73,7 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
             <div className="flex justify-between gap-4 p-4">
               <dt className="text-muted">Token</dt>
               <dd className="text-right text-fg">
-                {token.data ? `${token.data.symbol} · ${token.data.name}` : "…"}
+                {token.data ? `${token.data.symbol} · ${token.data.name}` : token.error ? "Unavailable" : "…"}
                 <span className="block">
                   <AddressLink address={p.token} />
                 </span>
@@ -84,12 +85,23 @@ export default function PlanDetailPage({ params }: { params: { id: string } }) {
             The merchant can charge at most once per interval and never more than the cap you choose. You can pause
             or cancel from My subscriptions whenever you like.
           </p>
+
+          <PlanShare planId={p.id} planName={p.name} />
         </section>
 
         <aside className="space-y-4">
           <h2 className="text-lg font-semibold text-fg">Subscribe</h2>
           {token.error ? (
-            <ErrorState error={token.error} title="Couldn't read this plan's token" onRetry={token.reload} />
+            <div role="alert" className="card space-y-3 border-warn/30 p-5 text-sm">
+              <h3 className="font-semibold text-warn">Subscribing is paused</h3>
+              <p className="text-muted">
+                This token&apos;s symbol or decimals couldn&apos;t be read, so amounts can&apos;t be shown reliably. You
+                can subscribe once the token details load.
+              </p>
+              <button type="button" onClick={token.reload} className="btn-secondary">
+                Try again
+              </button>
+            </div>
           ) : token.data ? (
             <SubscribeForm plan={p} token={token.data} />
           ) : (

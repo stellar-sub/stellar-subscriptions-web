@@ -30,7 +30,14 @@ export default function PlansPage() {
           empty={
             <EmptyState
               title="No plans yet"
-              description="No merchant has published a plan on this network. Merchants can create one from their dashboard."
+              description={
+                <>
+                  No merchant has published a plan on this network. Merchants can create one from their dashboard.{" "}
+                  <Link href="/help" className="text-brand hover:underline">
+                    How caps and intervals work
+                  </Link>
+                </>
+              }
               action={
                 <Link href="/merchant/plans/new" className="btn-secondary">
                   Create a plan

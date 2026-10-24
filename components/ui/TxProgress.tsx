@@ -1,92 +1,66 @@
-"use client";
+'use client';
 
-import { explorerTxUrl } from "@/lib/stellar";
-import type { Network, TxPhase } from "@/types";
-import { Spinner } from "./Spinner";
+import { useEffect, useState } from 'react';
 
-const STEPS: { phase: TxPhase; label: string }[] = [
-  { phase: "checking", label: "Checking with the contract that this is allowed right now" },
-  { phase: "building", label: "Preparing the transaction" },
-  { phase: "signing", label: "Waiting for your approval in Freighter" },
-  { phase: "submitting", label: "Sending to the network" },
-  { phase: "confirming", label: "Waiting for the ledger to confirm" },
-];
+interface TxProgressProps {
+  /** 0–100. When omitted, renders an indeterminate progress bar. */
+  value?: number;
+  label?: string;
+}
 
 /**
- * Step-by-step progress for one transaction, from preparation to
- * confirmation, ending in a success line with an explorer link or a plain
- * error message.
+ * Progress bar for on-chain transactions.
+ *
+ * Respects `prefers-reduced-motion`: when the user asks for less motion the
+ * indeterminate bar is rendered as a static, fully-visible track instead of
+ * an animated sweep, and the determinate bar transitions are disabled. The
+ * label and percentage always convey the state, so no essential information
+ * depends on motion.
  */
-export function TxProgress({
-  phase,
-  hash,
-  error,
-  network,
-  successText,
-  withCheck = false,
-  onDismiss,
-}: {
-  phase: TxPhase;
-  hash: string | null;
-  error: string | null;
-  network: Network;
-  successText: string;
-  /** Show the on-chain eligibility check step (used for charges). */
-  withCheck?: boolean;
-  onDismiss?: () => void;
-}) {
-  if (phase === "idle") return null;
+export function TxProgress({ value, label }: TxProgressProps) {
+  const [reducedMotion, setReducedMotion] = useState(false);
 
-  const steps = withCheck ? STEPS : STEPS.slice(1);
-  const current = steps.findIndex((s) => s.phase === phase);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+
+  const isIndeterminate = value === undefined;
+  const clamped = isIndeterminate ? 0 : Math.min(100, Math.max(0, value));
 
   return (
-    <div className="rounded-lg border border-line bg-raised/60 p-4 text-sm" aria-live="polite">
-      {phase !== "success" && phase !== "error" && (
-        <ol className="space-y-2">
-          {steps.map((step, i) => {
-            const done = i < current;
-            const active = i === current;
-            return (
-              <li key={step.phase} className={`flex items-center gap-2 ${active ? "text-fg" : done ? "text-muted" : "text-muted/60"}`}>
-                <span className="flex h-4 w-4 items-center justify-center">
-                  {active ? <Spinner label={step.label} /> : done ? "✓" : "·"}
-                </span>
-                {step.label}
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
-      {phase === "success" && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-ok">✓ {successText}</p>
-          <div className="flex items-center gap-3">
-            {hash && (
-              <a href={explorerTxUrl(network, hash)} target="_blank" rel="noreferrer" className="text-muted underline-offset-2 hover:text-fg hover:underline">
-                View transaction
-              </a>
-            )}
-            {onDismiss && (
-              <button type="button" onClick={onDismiss} className="text-muted hover:text-fg">
-                Dismiss
-              </button>
-            )}
-          </div>
+    <div
+      className="w-full"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={isIndeterminate ? undefined : clamped}
+      aria-label={label ?? 'Transaction progress'}
+    >
+      {label ? (
+        <div className="mb-1 flex items-center justify-between text-sm text-gray-600">
+          <span>{label}</span>
+          {!isIndeterminate ? <span>{clamped}%</span> : null}
         </div>
-      )}
-
-      {phase === "error" && (
-        <div role="alert" className="flex flex-wrap items-start justify-between gap-2">
-          <p className="text-danger">{error}</p>
-          {onDismiss && (
-            <button type="button" onClick={onDismiss} className="text-muted hover:text-fg">
-              Dismiss
-            </button>
-          )}
-        </div>
-      )}
+      ) : null}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+        {isIndeterminate ? (
+          reducedMotion ? (
+            <div className="h-full w-full rounded-full bg-blue-500" />
+          ) : (
+            <div className="h-full w-1/3 animate-[tx-progress_1.2s_ease-in-out_infinite] rounded-full bg-blue-500" />
+          )
+        ) : (
+          <div
+            className={`h-full rounded-full bg-blue-500${reducedMotion ? '' : ' transition-[width] duration-300'}`}
+            style={{ width: `${clamped}%` }}
+          />
+        )}
+      </div>
     </div>
   );
 }
