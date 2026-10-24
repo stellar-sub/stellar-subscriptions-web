@@ -12,6 +12,7 @@ import {
   BASE_FEE,
   Contract,
   Networks,
+  StrKey,
   TransactionBuilder,
   nativeToScVal,
   rpc,
@@ -105,8 +106,28 @@ export function explainError(raw: string, errors: ErrorTable): ContractError {
   return new ContractError("The network couldn't complete this request.", raw);
 }
 
+/** Account (G…) or contract (C…) address, checksum included. */
+export const isAddress = (v: string): boolean =>
+  StrKey.isValidEd25519PublicKey(v) || StrKey.isValidContract(v);
+
+/** Throws a message a person can read unless `v` is a valid address. */
+export function assertAddress(v: string): string {
+  if (!isAddress(v)) {
+    throw new ContractError("That isn't a valid Stellar address. Check it and try again.", v);
+  }
+  return v;
+}
+
+/** Throws a message a person can read unless `v` is a valid contract ID. */
+export function assertContractId(v: string): string {
+  if (!StrKey.isValidContract(v)) {
+    throw new ContractError("That isn't a valid contract ID. Check it and try again.", v);
+  }
+  return v;
+}
+
 export const arg = {
-  address: (v: string): xdr.ScVal => new Address(v).toScVal(),
+  address: (v: string): xdr.ScVal => new Address(assertAddress(v)).toScVal(),
   string: (v: string): xdr.ScVal => nativeToScVal(v, { type: "string" }),
   u32: (v: number): xdr.ScVal => nativeToScVal(v, { type: "u32" }),
   u64: (v: number | bigint): xdr.ScVal => nativeToScVal(BigInt(v), { type: "u64" }),
@@ -155,7 +176,7 @@ export async function readContract<T>(
     fee: BASE_FEE,
     networkPassphrase: NETWORKS[network].passphrase,
   })
-    .addOperation(new Contract(contractId).call(method, ...args))
+    .addOperation(new Contract(assertContractId(contractId)).call(method, ...args))
     .setTimeout(30)
     .build();
 
@@ -196,7 +217,7 @@ export async function invokeContract(
     );
   });
   const built = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: passphrase })
-    .addOperation(new Contract(contractId).call(method, ...args))
+    .addOperation(new Contract(assertContractId(contractId)).call(method, ...args))
     .setTimeout(120)
     .build();
 

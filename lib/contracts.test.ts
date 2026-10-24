@@ -6,6 +6,9 @@ import {
   decodePlan,
   decodeStats,
   decodeSubscription,
+  deactivatePlan,
+  getTokenInfo,
+  nativeTokenId,
   toNumber,
 } from "./contracts";
 import { SubStatus } from "@/types";
@@ -120,5 +123,37 @@ describe("deployments", () => {
   it("has Testnet contracts and no Mainnet deployment by default", () => {
     expect(contractsFor("testnet")?.subscription).toMatch(/^C[A-Z0-9]{55}$/);
     expect(contractsFor("mainnet")).toBeNull();
+  });
+});
+
+describe("native token id", () => {
+  it("returns the native SAC id for each network", () => {
+    expect(nativeTokenId("testnet")).toMatch(/^C[A-Z0-9]{55}$/);
+    expect(nativeTokenId("mainnet")).toMatch(/^C[A-Z0-9]{55}$/);
+    expect(nativeTokenId("testnet")).not.toBe(nativeTokenId("mainnet"));
+  });
+});
+
+describe("token info", () => {
+  it("maps the native token to XLM with 7 decimals", async () => {
+    const info = await getTokenInfo(nativeTokenId("testnet"), "testnet");
+    expect(info.symbol).toBe("XLM");
+    expect(info.decimals).toBe(7);
+  });
+
+  it("rejects a malformed contract id before any network call", async () => {
+    await expect(getTokenInfo("not-a-contract", "testnet")).rejects.toThrow(/contract id/i);
+  });
+
+  it("rejects when the token cannot be read", async () => {
+    const unreadable = "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    await expect(getTokenInfo(unreadable, "testnet")).rejects.toThrow();
+  });
+});
+
+describe("deactivate plan", () => {
+  it("builds a deactivate call for the given plan id", () => {
+    const call = deactivatePlan(7);
+    expect(call).toBeDefined();
   });
 });

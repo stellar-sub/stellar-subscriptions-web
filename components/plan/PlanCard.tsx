@@ -3,15 +3,15 @@ import { describeInterval, maxCharges, pluralize, shortAddress } from "@/lib/for
 import { TokenAmount } from "@/components/ui/TokenAmount";
 import type { Plan } from "@/types";
 import { PlanBadge } from "./PlanBadge";
+import { DeactivatePlanButton } from "./DeactivatePlanButton";
 
 export function PlanCard({ plan }: { plan: Plan }) {
   return (
-    <Link
-      href={`/plans/${plan.id}`}
-      className="card group flex flex-col gap-4 p-5 transition hover:border-brand/50"
-    >
+    <div className="card group flex flex-col gap-4 p-5 transition hover:border-brand/50">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-fg group-hover:text-brand">{plan.name}</h3>
+        <Link href={`/plans/${plan.id}`} className="font-semibold text-fg group-hover:text-brand">
+          {plan.name}
+        </Link>
         <PlanBadge active={plan.active} />
       </div>
       <p className="text-2xl font-semibold text-fg">
@@ -34,6 +34,11 @@ export function PlanCard({ plan }: { plan: Plan }) {
           <dd className="font-mono text-fg">{shortAddress(plan.merchant)}</dd>
         </div>
       </dl>
-    </Link>
+      {plan.active ? (
+        <div className="flex justify-end">
+          <DeactivatePlanButton plan={plan} />
+        </div>
+      ) : null}
+    </div>
   );
 }

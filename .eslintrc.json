@@ -1,6 +1,7 @@
 {
-  "extends": ["next/core-web-vitals"],
+  "extends": ["next/core-web-vitals", "plugin:@typescript-eslint/recommended"],
   "rules": {
-    "no-warning-comments": ["error", { "terms": ["todo", "fixme", "xxx"], "location": "anywhere" }]
+    "no-warning-comments": ["error", { "terms": ["todo", "fixme", "xxx"], "location": "anywhere" }],
+    "react/no-danger": "error"
   }
 }

@@ -6,6 +6,7 @@ import {
   currentAddress,
   isFreighterInstalled,
   signWithFreighter,
+  WalletError,
   walletNetwork as freighterNetwork,
   watchWallet,
 } from "@/lib/freighter";
@@ -118,7 +119,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       return {
         network,
         source,
-        sign: (xdr) => signWithFreighter(xdr, NETWORKS[network].passphrase, source),
+        sign: async (xdr) => {
+          // Re-read the wallet's network at signing time: the cached value can
+          // be up to one poll interval stale if Freighter was switched since.
+          const live = await freighterNetwork();
+          if (live !== network) {
+            const target = NETWORKS[network].label;
+            const current = live ? NETWORKS[live].label : "an unrecognised network";
+            throw new WalletError(
+              `Freighter is on ${current}, but this app is on ${target}. Switch Freighter to ${target}, then try again. Nothing was signed.`,
+            );
+          }
+          return signWithFreighter(xdr, NETWORKS[network].passphrase, source);
+        },
         onPhase,
       };
     },

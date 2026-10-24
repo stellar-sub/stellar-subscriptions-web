@@ -30,6 +30,40 @@ describe("formatAmount", () => {
   it("keeps the sign of negative values", () => {
     expect(formatAmount(-50_000_000n, 7)).toBe("-5");
   });
+
+  it("follows the locale's grouping and decimal separators", () => {
+    expect(formatAmount(12_500_000n, 7, undefined, "de-DE")).toBe("1,25");
+    expect(formatAmount(123_456_789_012_345_678n, 7, undefined, "de-DE")).toBe(
+      "12.345.678.901,2345678",
+    );
+    expect(formatAmount(12_500_000n, 7, undefined, "fr-FR")).toBe("1,25");
+  });
+
+  it("never changes the value of an amount across locales", () => {
+    const locales = ["en-US", "de-DE", "fr-FR", "ja-JP", "hi-IN", "ar-EG"];
+    const samples = [
+      0n,
+      1n,
+      9_999_999n,
+      10_000_000n,
+      12_500_000n,
+      123_456_789_012_345_678n,
+      -50_000_000n,
+    ];
+    for (const locale of locales) {
+      for (const raw of samples) {
+        const formatted = formatAmount(raw, 7, undefined, locale);
+        // Round-trip through the locale-agnostic parser must recover the raw value.
+        const normalized = formatted.replace(/[^0-9.-]/g, "");
+        const sign = raw < 0n ? -1n : 1n;
+        const magnitude = raw < 0n ? -raw : raw;
+        const whole = magnitude / 10_000_000n;
+        const frac = magnitude % 10_000_000n;
+        const expected = frac === 0n ? `${whole}` : `${whole}.${frac.toString().padStart(7, "0").replace(/0+$/, "")}`;
+        expect(normalized).toBe(sign < 0n ? `-${expected}` : expected);
+      }
+    }
+  });
 });
 
 describe("parseAmount", () => {
