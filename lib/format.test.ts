@@ -88,3 +88,13 @@ describe("formatAmount / parseAmount round-trip", () => {
     expect(smallest).toBe(1n);
   });
 });
+
+import { readFileSync } from "node:fs";
+
+describe("format.ts module style", () => {
+  it("imports StrKey as an ES module instead of using require()", () => {
+    const source = readFileSync(new URL("./format.ts", import.meta.url), "utf8");
+    expect(source).toMatch(/import \{[^}]*StrKey[^}]*\} from "@stellar\/stellar-sdk"/);
+    expect(source).not.toMatch(/require\("@stellar\/stellar-sdk"\)/);
+  });
+});
