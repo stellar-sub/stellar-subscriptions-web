@@ -8,6 +8,7 @@
  */
 
 import { formatDuration, intervalToDuration, type Duration } from "date-fns";
+import { StrKey } from "@stellar/stellar-sdk";
 
 /** Approximate seconds per ledger on Stellar. */
 export const LEDGER_SECONDS = 5;
@@ -224,7 +225,6 @@ export function normalizeTo30Days(amountPerPeriod: bigint, intervalLedgers: numb
 export function isValidStellarAddress(address: string): boolean {
   if (typeof address !== "string") return false;
   try {
-    const { StrKey } = require("@stellar/stellar-sdk");
     return StrKey.isValidEd25519PublicKey(address);
   } catch {
     return false;
