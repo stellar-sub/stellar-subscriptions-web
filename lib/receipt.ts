@@ -51,6 +51,19 @@ the transaction hash above.
 }
 
 /**
+ * Escape characters that are significant in HTML so user-supplied values
+ * cannot inject markup into the generated receipt.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Generate HTML for a printable receipt
  */
 export function generateReceiptHTML(charge: ChargeEvent): string {
@@ -65,12 +78,17 @@ export function generateReceiptHTML(charge: ChargeEvent): string {
     minute: "2-digit",
   });
 
+  const amount = escapeHtml(charge.amount);
+  const token = escapeHtml(charge.token);
+  const merchant = escapeHtml(charge.merchant);
+  const hash = escapeHtml(charge.hash);
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${charge.amount} ${charge.token}</title>
+  <title>Receipt - ${amount} ${token}</title>
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -128,16 +146,16 @@ export function generateReceiptHTML(charge: ChargeEvent): string {
     </div>
     <div class="row">
       <span class="label">Amount</span>
-      <span class="value"><strong>${charge.amount} ${charge.token}</strong></span>
+      <span class="value"><strong>${amount} ${token}</strong></span>
     </div>
     <div class="row">
       <span class="label">Merchant</span>
-      <span class="value">${charge.merchant}</span>
+      <span class="value">${merchant}</span>
     </div>
     <div class="divider"></div>
     <div class="row">
       <span class="label">Transaction Hash</span>
-      <span class="value"><code>${charge.hash}</code></span>
+      <span class="value"><code>${hash}</code></span>
     </div>
     <div class="footer">
       <p>This receipt confirms that the charge has been processed on the Stellar blockchain.</p>
