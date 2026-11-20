@@ -12,6 +12,7 @@ import { CapProgress } from "@/components/subscription/CapProgress";
 import { NextChargeCountdown } from "@/components/subscription/NextChargeCountdown";
 import { PauseResumeButton } from "@/components/subscription/PauseResumeButton";
 import { CancelButton } from "@/components/subscription/CancelButton";
+import { ExhaustedNotice } from "@/components/subscription/ExhaustedNotice";
 import { SubStatusBadge } from "@/components/subscription/SubStatusBadge";
 import { ChargeHistory } from "@/components/subscription/ChargeHistory";
 
@@ -100,6 +101,7 @@ export default function SubscriptionDetailPage() {
       <section className="space-y-4">
         <CapProgress sub={subscription} />
         <NextChargeCountdown sub={subscription} />
+        <ExhaustedNotice sub={subscription} />
       </section>
 
       <ChargeHistory subscriptionId={subscription.id} token={subscription.token} />
