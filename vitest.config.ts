@@ -6,7 +6,6 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
-    conditions: ["browser", "module", "import", "default"],
   },
   test: {
     environment: "jsdom",
@@ -14,13 +13,6 @@ export default defineConfig({
     setupFiles: ["./vitest.setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
-    server: {
-      deps: {
-        // Inline dependencies so their source maps are resolved and stack
-        // traces point to .ts source files rather than compiled .js output.
-        inline: [/node_modules/],
-      },
-    },
     coverage: {
       provider: "v8",
       include: ["lib/**/*.{ts,tsx}", "components/**/*.{ts,tsx}"],
