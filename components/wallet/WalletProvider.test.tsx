@@ -201,6 +201,44 @@ describe("WalletProvider", () => {
     });
   });
 
+  it("ignores invalid network values passed to setNetwork", async () => {
+    localStorage.setItem("subs.wallet.connected", "1");
+    vi.mocked(freighter.currentAddress).mockResolvedValue(ADDR1);
+    vi.mocked(freighter.walletNetwork).mockResolvedValue("testnet");
+
+    function SetNetworkComponent() {
+      const wallet = useWallet();
+      return (
+        <div>
+          <div data-testid="network">{wallet.network}</div>
+          <button onClick={() => wallet.setNetwork("bogus" as never)}>Set Bogus</button>
+          <button onClick={() => wallet.setNetwork("mainnet")}>Set Mainnet</button>
+        </div>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <WalletProvider>
+        <SetNetworkComponent />
+      </WalletProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("network")).toHaveTextContent("testnet");
+    });
+
+    await user.click(screen.getByText("Set Bogus"));
+
+    expect(screen.getByTestId("network")).toHaveTextContent("testnet");
+
+    await user.click(screen.getByText("Set Mainnet"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("network")).toHaveTextContent("mainnet");
+    });
+  });
+
   it("detects account switch during session", async () => {
     localStorage.setItem("subs.wallet.connected", "1");
     vi.mocked(freighter.currentAddress).mockResolvedValue(ADDR1);
