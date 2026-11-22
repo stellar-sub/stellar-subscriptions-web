@@ -1,6 +1,10 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { describeInterval, maxCharges, pluralize, shortAddress } from "@/lib/format";
 import { TokenAmount } from "@/components/ui/TokenAmount";
+import { CopyButton } from "@/components/ui/CopyButton";
 import type { Plan } from "@/types";
 import { PlanBadge } from "./PlanBadge";
 
@@ -23,6 +27,10 @@ export function PlanCard({
   const createdLabel = created
     ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(created)
     : null;
+  const [origin, setOrigin] = useState("");
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
   return (
     <Link href={`/plans/${plan.id}`} className="card group flex flex-col gap-4 p-5 transition hover:border-brand/50">
       <div className="flex items-start justify-between gap-3">
@@ -57,6 +65,15 @@ export function PlanCard({
           </div>
         )}
       </dl>
+      <div
+        className="flex justify-end"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <CopyButton value={`${origin}/plans/${plan.id}`} label="Copy link" iconOnly />
+      </div>
     </Link>
   );
 }

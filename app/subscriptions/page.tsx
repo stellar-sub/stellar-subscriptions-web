@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSubscriptions } from "@/hooks/useSubscriptions";
+import { useTx } from "@/hooks/useTx";
+import { pauseSubscription } from "@/lib/contract";
 import { sortForDisplay } from "@/lib/subscription";
 import { scoreHealth, type HealthLevel } from "@/lib/subscription-health";
 import { CommittedSpend } from "@/components/subscription/CommittedSpend";
@@ -93,15 +95,23 @@ export default function MySubscriptionsPage() {
   );
 }
 
+type PauseAllResult = { sub: Subscription; ok: boolean; error?: string };
+
 function Subscriptions({ address }: { address: string }) {
   const subs = useSubscriptions(address);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const tx = useTx();
+
+  const [pauseAllOpen, setPauseAllOpen] = useState(false);
+  const [pauseAllRunning, setPauseAllRunning] = useState(false);
+  const [pauseAllResults, setPauseAllResults] = useState<PauseAllResult[] | null>(null);
 
   const statusFilter = parseStatusParam(searchParams.get("status"));
   const sortKey = parseSortParam(searchParams.get("sort"));
 
-  const activeCount = subs.data?.filter((sub) => sub.status === SubStatus.Active).length;
+  const activeSubs = subs.data?.filter((sub) => sub.status === SubStatus.Active) ?? [];
+  const activeCount = subs.data ? activeSubs.length : undefined;
 
   useEffect(() => {
     document.title = subscriptionsTitle(activeCount);
@@ -114,6 +124,23 @@ function Subscriptions({ address }: { address: string }) {
     },
     [],
   );
+
+  async function runPauseAll() {
+    setPauseAllRunning(true);
+    const results: PauseAllResult[] = [];
+    for (const sub of activeSubs) {
+      try {
+        await tx.run(() => pauseSubscription(address, sub.id));
+        results.push({ sub, ok: true });
+      } catch (err) {
+        results.push({ sub, ok: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+    setPauseAllResults(results);
+    setPauseAllRunning(false);
+    setPauseAllOpen(false);
+    subs.reload();
+  }
 
   function updateParams(updates: { status?: StatusFilter; sort?: SortKey }) {
     const params = new URLSearchParams(searchParams.toString());
@@ -170,6 +197,61 @@ function Subscriptions({ address }: { address: string }) {
       <HealthBadge health={health} />
       <AllowanceBanner subs={subs.data} />
       <CommittedSpend subs={subs.data} />
+
+      {activeSubs.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              setPauseAllResults(null);
+              setPauseAllOpen(true);
+            }}
+          >
+            Pause all
+          </button>
+        </div>
+      )}
+
+      {pauseAllResults && (
+        <div className="rounded border border-border bg-surface p-4" role="status">
+          <h2 className="mb-2 text-sm font-semibold text-fg">Pause all results</h2>
+          <ul className="space-y-1 text-sm">
+            {pauseAllResults.map(({ sub, ok, error }) => (
+              <li key={sub.id} className={ok ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                Subscription #{String(sub.id)}: {ok ? "paused" : `failed${error ? ` — ${error}` : ""}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {pauseAllOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md space-y-4 rounded-lg border border-border bg-surface p-6">
+            <h2 className="text-lg font-semibold text-fg">Pause all subscriptions?</h2>
+            <p className="text-sm text-muted">The following subscriptions will be paused:</p>
+            <ul className="max-h-48 space-y-1 overflow-y-auto text-sm text-fg">
+              {activeSubs.map((sub) => (
+                <li key={sub.id}>#{String(sub.id)}</li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setPauseAllOpen(false)}
+                disabled={pauseAllRunning}
+              >
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={runPauseAll} disabled={pauseAllRunning}>
+                {pauseAllRunning ? "Pausing…" : "Pause all"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-2">
