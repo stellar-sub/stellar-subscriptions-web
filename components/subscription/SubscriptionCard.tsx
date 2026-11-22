@@ -1,157 +1,127 @@
-import Link from "next/link";
-import { useMemo } from "react";
+"use client";
+
 import { memo } from "react";
-import { Subscription } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
-import { useLedger } from "@/lib/ledger";
-import { usePlan } from "@/lib/hooks/usePlan";
-import CancelButton from "./CancelButton";
-import PauseButton from "./PauseButton";
+import { useLedger } from "@/hooks/useLedger";
+import { useWallet } from "@/hooks/useWallet";
+import { usePlan } from "@/hooks/usePlans";
+import { isDueByLedger } from "@/lib/subscription";
+import { SubStatus, type Subscription } from "@/types";
+import { SubStatusBadge } from "./SubStatusBadge";
+import { CapProgress } from "./CapProgress";
+import { NextChargeCountdown } from "./NextChargeCountdown";
 
 type Props = {
-  subscription: Subscription;
-  currentLedger?: number;
+  sub: Subscription;
 };
 
 /**
- * Buckets the remaining ledgers so that the comparator only treats a ledger
- * tick as a change when the displayed countdown text would actually change.
+ * Buckets the ledger distance so memo only treats a tick as a meaningful
+ * change when the displayed countdown text would actually change.
+ * Returns -1 when the charge is already overdue (bucket 0 would conflate
+ * "just became overdue" with "still counting down to 0").
  */
-function countdownBucket(
-  nextChargeLedger: number | undefined,
-  currentLedger: number | undefined,
-): number {
-  if (nextChargeLedger === undefined || currentLedger === undefined) {
-    return 0;
-  }
-  return Math.max(0, nextChargeLedger - currentLedger);
+function countdownBucket(nextChargeLedger: number, currentLedger: number): number {
+  const remaining = nextChargeLedger - currentLedger;
+  return remaining <= 0 ? -1 : remaining;
 }
 
-export function arePropsEqual(prev: Props, next: Props): boolean {
-  const a = prev.subscription;
-  const b = next.subscription;
+function arePropsEqual(prev: Props, next: Props): boolean {
+  const a = prev.sub;
+  const b = next.sub;
 
   if (
     a.id !== b.id ||
-    a.planName !== b.planName ||
-    a.merchantName !== b.merchantName ||
-    a.amount !== b.amount ||
-    a.currency !== b.currency ||
-    a.interval !== b.interval ||
-    a.nextChargeAt !== b.nextChargeAt ||
-    a.status !== b.status
+    a.status !== b.status ||
+    a.amountPerPeriod !== b.amountPerPeriod ||
+    a.totalCap !== b.totalCap ||
+    a.totalCharged !== b.totalCharged ||
+    a.token !== b.token ||
+    a.planId !== b.planId
   ) {
     return false;
   }
 
+  // A memo skip is safe only when the countdown bucket is unchanged too.
+  // We compare against ledger 0 here because the currentLedger isn't a prop;
+  // it comes from the hook inside. This means memo never skips on a pure
+  // nextChargeLedger change — a known, acceptable trade-off.
   return (
-    countdownBucket(a.nextChargeLedger, prev.currentLedger) ===
-    countdownBucket(b.nextChargeLedger, next.currentLedger)
+    countdownBucket(a.nextChargeLedger, 0) === countdownBucket(b.nextChargeLedger, 0)
   );
 }
 
-function SubscriptionCard({ subscription }: Props) {
-  const {
-    id,
-    planId,
-    planName,
-    merchantName,
-    amount,
-    currency,
-    interval,
-    nextChargeAt,
-    startLedger,
-    status,
-    address,
-    network,
-  } = subscription;
-
-  const { currentLedger } = useLedger();
-  const { data: plan, isLoading, error } = usePlan(
-    planId !== 0 ? planId : null,
+function SubscriptionCard({ sub }: Props) {
+  const { network } = useWallet();
+  const { sequence } = useLedger(network);
+  const { data: plan, error, loading: isLoading } = usePlan(
+    sub.planId !== 0 ? sub.planId : null,
   );
 
-  const isActive = status === "active";
-  const isPaused = status === "paused";
-  const isFutureStart = currentLedger < startLedger;
-  const startsIn = formatApproxDuration(startLedger - currentLedger);
-
-  const sortedSubscription = useMemo(
-    () => sortForDisplay([subscription]),
-    [subscription, address, network],
-  );
+  const currentLedger = sequence ?? 0;
+  const overdue = isDueByLedger(sub, currentLedger);
 
   return (
     <article
-      className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm focus-within:ring-2 focus-within:ring-blue-600"
-      aria-labelledby={`subscription-${id}-title`}
+      className="card space-y-4 p-5"
+      aria-labelledby={`sub-${sub.id}-heading`}
     >
-      <div className="flex items-start justify-between gap-4">
+      {/* ── Header ──────────────────────────────────────────────────── */}
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3
-            id={`subscription-${id}-title`}
-            className="text-base font-semibold text-gray-900"
+            id={`sub-${sub.id}-heading`}
+            className="font-semibold text-fg"
+            data-testid="sub-heading"
           >
-            <Link
-              href={`/plans/${id}`}
-              className="rounded underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-            >
-              {planName}
-            </Link>
+            Subscription #{sub.id}
           </h3>
-          <p className="text-sm text-gray-600">{merchantName}</p>
-          {planId !== 0 && (
-            <p className="text-xs text-gray-500">
-              {isLoading
-                ? "Loading plan…"
-                : error
-                  ? "Plan unavailable"
-                  : plan?.name}
-            </p>
+
+          {sub.planId !== 0 && (
+            <>
+              {isLoading && (
+                <p
+                  className="text-xs text-muted"
+                  aria-busy="true"
+                  data-testid="plan-name-loading"
+                >
+                  Loading plan…
+                </p>
+              )}
+              {!isLoading && error && (
+                <p className="text-xs text-muted" data-testid="plan-name-error">
+                  Plan unavailable
+                </p>
+              )}
+              {!isLoading && !error && plan && (
+                <p className="text-xs text-muted" data-testid="plan-name">
+                  {(plan as { name: string }).name}
+                </p>
+              )}
+            </>
           )}
         </div>
-        <span
-          className={
-            isActive
-              ? "rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800"
-              : isPaused
-                ? "rounded-full bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800"
-                : "rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700"
-          }
-        >
-          {status}
-        </span>
+
+        {/* Status badges — the "Due now" badge uses rose/red to distinguish
+            it clearly from the green/yellow/grey status badges. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {overdue && (
+            <span
+              className="rounded-full border border-rose-400/40 bg-rose-500/15 px-2 py-0.5 text-xs font-medium text-rose-700 dark:text-rose-400"
+              title="The merchant can charge this subscription right now."
+              data-testid="due-now-badge"
+            >
+              Due now
+            </span>
+          )}
+          <SubStatusBadge status={sub.status} />
+        </div>
       </div>
 
-      <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
-        <div>
-          <dt className="text-gray-500">Amount</dt>
-          <dd className="font-medium text-gray-900">
-            {formatCurrency(amount, currency)} / {interval}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-gray-500">Next charge</dt>
-          <dd className="font-medium text-gray-900">
-            {isFutureStart
-              ? `Starts in ~${startsIn}`
-              : isActive
-                ? formatDate(nextChargeAt)
-                : "—"}
-          </dd>
-        </div>
-      </dl>
+      {/* ── Charge countdown ────────────────────────────────────────── */}
+      <NextChargeCountdown sub={sub} />
 
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={`/plans/${id}`}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
-        >
-          View plan
-        </Link>
-        {isActive && <PauseButton subscriptionId={id} />}
-        {(isActive || isPaused) && <CancelButton subscriptionId={id} />}
-      </div>
+      {/* ── Cap progress ────────────────────────────────────────────── */}
+      <CapProgress sub={sub} />
     </article>
   );
 }

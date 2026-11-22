@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { formatAmount, isValidStellarAddress, parseAmount } from "./format";
+import { formatAmount, isValidStellarAddress, parseAmount, shortAddress } from "./format";
 
 /**
  * Property tests: formatting a raw amount and parsing it back must yield the
@@ -126,5 +126,29 @@ describe("isValidStellarAddress", () => {
 
   it("rejects a contract address (C-prefix)", () => {
     expect(isValidStellarAddress("CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC")).toBe(false);
+  });
+});
+
+describe("shortAddress", () => {
+  it("returns a 4-character address unchanged with keep=4", () => {
+    const short = "ABCD";
+    expect(short.length).toBe(4);
+    const result = shortAddress(short, 4);
+    expect(result).toBe(short);
+  });
+
+  it("returns an address at the exact boundary length unchanged", () => {
+    // boundary = keep * 2 + 1 = 4 * 2 + 1 = 9
+    const boundary = "ABCDEFGHI";
+    expect(boundary.length).toBe(9);
+    const result = shortAddress(boundary, 4);
+    expect(result).toBe(boundary);
+  });
+
+  it("truncates an address longer than the boundary", () => {
+    const long = "ABCDEFGHIJ";
+    expect(long.length).toBe(10);
+    const result = shortAddress(long, 4);
+    expect(result).toBe("ABCD…GHIJ");
   });
 });

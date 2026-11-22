@@ -4,8 +4,6 @@ import { TokenAmount } from "@/components/ui/TokenAmount";
 import type { Plan } from "@/types";
 import { PlanBadge } from "./PlanBadge";
 
-export function PlanCard({ plan }: { plan: Plan }) {
-  const intervalLabel = describeInterval(plan.intervalLedgers);
 const LEDGER_SECONDS = 5;
 
 export function PlanCard({
@@ -17,6 +15,7 @@ export function PlanCard({
   latestLedger?: number | null;
   latestClosedAt?: number | null;
 }) {
+  const intervalLabel = describeInterval(plan.intervalLedgers);
   const created =
     latestLedger != null && latestClosedAt != null
       ? new Date(latestClosedAt - (latestLedger - plan.createdAt) * LEDGER_SECONDS * 1000)

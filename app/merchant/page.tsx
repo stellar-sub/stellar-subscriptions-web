@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { RequireWallet } from '@/components/RequireWallet';
-import { EmptyState } from '@/components/EmptyState';
+import { RequireWallet } from '@/components/wallet/RequireWallet';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { AddressLink } from '@/components/ui/AddressLink';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { useWallet } from '@/hooks/useWallet';
-import { useMerchantPlans } from '@/hooks/useMerchantPlans';
+import { useMerchantPlans } from '@/hooks/usePlans';
 import { useToken } from '@/hooks/useToken';
-import { getTokenBalance } from '@/lib/token';
+import { getTokenBalance } from '@/lib/contracts';
 import { MerchantChargedToday } from '@/components/merchant/ChargedToday';
 
 const SHARE_FLAG_KEY = 'merchant:hasSharedPlanLink';

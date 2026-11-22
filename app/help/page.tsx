@@ -44,7 +44,6 @@ const SECTIONS = [
       text: "See every subscription status, what causes each transition, which are reversible, and what happens to funds in each state.",
     },
   },
-=======
   {
     id: "failed-charge",
     title: "What happens when a charge fails",

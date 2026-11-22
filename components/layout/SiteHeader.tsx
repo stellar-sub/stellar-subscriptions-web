@@ -48,16 +48,12 @@ export function SiteHeader() {
       : 0;
 
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+    !!pathname && (pathname === href || pathname.startsWith(`${href}/`));
 
   const navLinkClass = (href: string) =>
     `rounded-lg px-3 py-2 text-sm transition ${
       isActive(href) ? "bg-raised text-fg" : "text-muted hover:text-fg"
     }`;
-  const isActive = (href: string) => {
-    if (!pathname) return false;
-    return pathname === href || pathname.startsWith(`${href}/`);
-  };
 
   const nonMerchantLinks = NON_MERCHANT_NAV.map((item) => (
     <Link
