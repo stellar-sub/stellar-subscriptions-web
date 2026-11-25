@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PlanCard from './PlanCard';
 import type { Plan } from '@/types';
 
@@ -32,6 +32,20 @@ function formatExpectedDate(date: Date): string {
 }
 
 describe('PlanCard', () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders an estimated creation date when ledger props are provided', () => {
     const latestClosedAt = new Date('2024-01-15T12:00:00Z');
     const latestLedger = 2000;
@@ -54,5 +68,29 @@ describe('PlanCard', () => {
     render(<PlanCard plan={samplePlan} />);
 
     expect(screen.queryByText(/Created ≈/)).not.toBeInTheDocument();
+  });
+
+  it('renders a copy link button with the plan URL', () => {
+    render(<PlanCard plan={samplePlan} />);
+
+    const copyButton = screen.getByRole('button', { name: /copy link/i });
+    expect(copyButton).toBeInTheDocument();
+    expect(copyButton).toHaveAttribute(
+      'data-value',
+      `${window.location.origin}/plans/${samplePlan.id}`,
+    );
+  });
+
+  it('copies the plan URL to the clipboard without navigating', async () => {
+    render(<PlanCard plan={samplePlan} />);
+
+    const copyButton = screen.getByRole('button', { name: /copy link/i });
+    fireEvent.click(copyButton);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/plans/${samplePlan.id}`,
+      );
+    });
   });
 });

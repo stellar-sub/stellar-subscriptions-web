@@ -36,6 +36,11 @@ export default defineConfig({
     // break.  "node" first so server-only sub-paths resolve correctly.
     conditions: ["node", "module", "import", "default"],
     alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
+    // `browser` is intentionally omitted: msw/node exports `browser: null`
+    // which causes vite to fail when `browser` is listed as a condition.
+    // Tests run in jsdom so browser-specific entry points aren't needed;
+    // packages that have only a browser build still resolve via `default`.
+    conditions: ["module", "import", "default"],
     conditions: ["node", "browser", "module", "import", "default"],
   },
   test: {
@@ -46,6 +51,15 @@ export default defineConfig({
     exclude: ["node_modules", ".next"],
     server: {
       deps: {
+        // Inline most node_modules so source maps resolve to .ts source files.
+        // Exclude vitest/its runner internals to prevent duplicate module
+        // instances (which break beforeAll/afterAll suite registration).
+        inline: [/node_modules\/(?!vitest|@vitest)/],
+        // Inline most dependencies so their source maps are resolved and stack
+        // traces point to .ts source files rather than compiled .js output.
+        // vitest's own packages must NOT be inlined — doing so breaks the
+        // suite-context tracking that beforeAll/afterAll rely on.
+        inline: [/node_modules\/(?!vitest)/],
         // Inline most third-party deps so source maps resolve to .ts files.
         // Exclude vitest's own runner/utils (inlining them creates duplicate
         // module instances that break suite tracking) and msw + interceptors

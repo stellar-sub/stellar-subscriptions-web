@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useSubscription } from "@/hooks/useSubscriptions";
 import { describeInterval } from "@/lib/format";
+import { SubStatus } from "@/types";
 import { AddressLink } from "@/components/ui/AddressLink";
 import { TokenAmount } from "@/components/ui/TokenAmount";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -105,6 +106,16 @@ export default function SubscriptionDetailPage() {
       <ChargeHistory subscriptionId={subscription.id} token={subscription.token} />
 
       <footer className="flex flex-wrap items-center gap-3 border-t border-line pt-6">
+        {subscription.status === SubStatus.Exhausted && (
+          <p className="w-full text-sm text-muted" data-testid="exhausted-notice">
+            The cap on this subscription is fully charged, so it can&apos;t be resumed or charged again — there is no
+            &ldquo;resubscribe&rdquo; button here. To keep paying this merchant,{" "}
+            <Link href="/plans" className="text-brand underline">
+              subscribe to a plan
+            </Link>{" "}
+            and start a new subscription.
+          </p>
+        )}
         <PauseResumeButton sub={subscription} onDone={sub.reload} />
         <CancelButton sub={subscription} onDone={sub.reload} />
         <Link href="/subscriptions" className="ml-auto text-sm text-brand hover:underline">

@@ -290,8 +290,6 @@ export const TOKEN_CACHE_LIMIT = 100;
  * entry once the cap is reached.
  */
 const tokenCache = new Map<string, Promise<TokenInfo>>();
-/** In-flight token reads, so concurrent callers share one set of network calls. */
-const tokenInflight = new Map<string, Promise<TokenInfo>>();
 
 function cacheGet(key: string): Promise<TokenInfo> | undefined {
   const cached = tokenCache.get(key);
@@ -572,17 +570,18 @@ export async function getChargeEvents(
 }
 
 /**
- * An *estimate* of when `ledger` closed, derived from the latest ledger's
- * close time and the average ledger interval. Ledgers can close faster or
- * slower than the average, so callers must label this as approximate.
+ * An *estimate* of when `ledger` closed (past) or will close (future), derived
+ * from the latest ledger's close time and the average ledger interval. Ledgers
+ * can close faster or slower than the average, so callers must label this as
+ * approximate.
  */
 export function estimateLedgerDate(
   ledger: number,
   latestLedger: number,
   latestClosedAt: Date,
 ): Date {
-  const behind = Math.max(0, latestLedger - ledger);
-  return new Date(latestClosedAt.getTime() - behind * LEDGER_SECONDS * 1000);
+  const diff = ledger - latestLedger;
+  return new Date(latestClosedAt.getTime() + diff * LEDGER_SECONDS * 1000);
 }
 
 /** Re-exported so callers can tell a contract rejection from other failures. */
