@@ -1,0 +1,262 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Subscription detail page > matches the snapshot for the exhausted state 1`] = `
+<DocumentFragment>
+  <div
+    class="space-y-6"
+  >
+    <header
+      class="space-y-2"
+    >
+      <div
+        class="flex items-start justify-between gap-3"
+      >
+        <div>
+          <h1
+            class="text-3xl font-semibold text-fg"
+          >
+            Subscription #7
+          </h1>
+          <p
+            class="mt-1 text-sm text-muted"
+          >
+            <span
+              class="tabular-nums "
+            >
+              0.1 USDC
+            </span>
+             every every hour
+          </p>
+        </div>
+        <span
+          class="rounded-full border px-2 py-0.5 text-xs font-medium border-line bg-raised text-fg"
+          title="The full cap has been charged. No further charges are possible."
+        >
+          Cap reached
+        </span>
+      </div>
+    </header>
+    <section
+      class="space-y-4 rounded border border-line p-6"
+    >
+      <h2
+        class="text-lg font-semibold text-fg"
+      >
+        Subscription terms
+      </h2>
+      <div
+        class="grid gap-4 sm:grid-cols-2"
+      >
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Merchant
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            <span
+              class="inline-flex items-center gap-1"
+            >
+              <a
+                class="font-mono text-sm text-fg underline-offset-2 hover:underline"
+                href="https://stellar.expert/explorer/testnet/account/GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+                rel="noreferrer"
+                target="_blank"
+                title="GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+              >
+                GCLA…KKTU
+              </a>
+              <button
+                aria-label="Copy GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+                class="rounded px-1.5 py-0.5 text-xs text-muted transition hover:bg-raised hover:text-fg"
+                type="button"
+              >
+                Copy
+              </button>
+            </span>
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Billing frequency
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            every hour
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Amount per period
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            <span
+              class="tabular-nums "
+            >
+              0.1 USDC
+            </span>
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Total cap
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            <span
+              class="tabular-nums "
+            >
+              1.2 USDC
+            </span>
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Total charged
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            <span
+              class="tabular-nums "
+            >
+              1.2 USDC
+            </span>
+          </p>
+        </div>
+        <div>
+          <p
+            class="text-sm text-muted"
+          >
+            Plan
+          </p>
+          <p
+            class="font-medium text-fg"
+          >
+            <a
+              class="text-brand hover:underline"
+              href="/plans/1"
+            >
+              Plan #1
+            </a>
+          </p>
+        </div>
+      </div>
+    </section>
+    <section
+      class="space-y-4"
+    >
+      <div
+        class="space-y-2"
+      >
+        <div
+          class="flex items-baseline justify-between gap-3 text-sm"
+        >
+          <span
+            class="text-muted"
+          >
+            Charged so far
+          </span>
+          <span
+            class="text-fg"
+          >
+            <span
+              class="tabular-nums font-medium"
+            >
+              1.2 USDC
+            </span>
+            <span
+              class="text-muted"
+            >
+               of 
+            </span>
+            <span
+              class="tabular-nums "
+            >
+              1.2 USDC
+            </span>
+          </span>
+        </div>
+        <div
+          aria-label="100% of the cap charged"
+          aria-valuemax="100"
+          aria-valuemin="0"
+          aria-valuenow="100"
+          class="h-2.5 overflow-hidden rounded-full bg-raised"
+          role="progressbar"
+        >
+          <div
+            class="h-full rounded-full transition-all motion-reduce:transition-none bg-warn"
+            style="width: 100%;"
+          />
+        </div>
+        <p
+          class="text-xs text-muted"
+        >
+          The whole cap has been charged. Nothing more can be taken.
+        </p>
+      </div>
+      <div
+        class="text-sm"
+      >
+        <div
+          class="flex items-baseline justify-between gap-3"
+        >
+          <span
+            class="text-muted"
+          >
+            Next charge
+          </span>
+          <span
+            class="text-right font-medium text-fg"
+          >
+            None — cap fully charged
+          </span>
+        </div>
+      </div>
+    </section>
+    <div
+      data-testid="charge-history"
+    >
+      Charge history
+    </div>
+    <footer
+      class="flex flex-wrap items-center gap-3 border-t border-line pt-6"
+    >
+      <p
+        class="w-full text-sm text-muted"
+        data-testid="exhausted-notice"
+      >
+        The cap on this subscription is fully charged, so it can't be resumed or charged again — there is no “resubscribe” button here. To keep paying this merchant, 
+        <a
+          class="text-brand underline"
+          href="/plans"
+        >
+          subscribe to a plan
+        </a>
+         and start a new subscription.
+      </p>
+      <a
+        class="ml-auto text-sm text-brand hover:underline"
+        href="/subscriptions"
+      >
+        Back to subscriptions
+      </a>
+    </footer>
+  </div>
+</DocumentFragment>
+`;

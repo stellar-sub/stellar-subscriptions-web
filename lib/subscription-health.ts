@@ -1,5 +1,8 @@
 export type HealthScore = "good" | "at-risk" | "critical";
 
+/** Alias kept for compatibility with components that import HealthLevel. */
+export type HealthLevel = HealthScore;
+
 export interface Subscription {
   id: string;
   amount: number;
