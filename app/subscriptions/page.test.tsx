@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubStatus, type Subscription } from "@/types";
@@ -47,6 +47,26 @@ vi.mock("@/hooks/useWallet", () => ({
 
 vi.mock("@/hooks/useSubscriptions", () => ({
   useSubscriptions: () => subsState,
+}));
+
+// Mock the tx runner so we can drive pauseSubscription results per test.
+type TxRunResult = { ok: true; hash: string } | { ok: false; error: string };
+let txRunImpl: (fn: unknown, args: unknown[]) => Promise<TxRunResult>;
+const txRun = vi.fn((fn: unknown, args: unknown[]) => txRunImpl(fn, args));
+
+vi.mock("@/hooks/useTx", () => ({
+  useTx: () => ({
+    run: txRun,
+    pending: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+}));
+
+// pauseSubscription is called through useTx.run; stub it so we can identify it.
+const pauseSubscription = vi.fn((id: number) => ({ kind: "pauseSubscription", id }));
+vi.mock("@/lib/contract", () => ({
+  pauseSubscription: (id: number) => pauseSubscription(id),
 }));
 
 // The page's job here is the title and the empty state; keep its children inert.
@@ -102,6 +122,9 @@ describe("/subscriptions page", () => {
     currentSearch = "";
     lastReplace = undefined;
     lastPush = undefined;
+    txRun.mockClear();
+    pauseSubscription.mockClear();
+    txRunImpl = async () => ({ ok: true, hash: "HASH" });
   });
 
   describe("document title", () => {
@@ -266,6 +289,96 @@ describe("/subscriptions page", () => {
       render(<MySubscriptionsPage />);
 
       expect(screen.getByRole("heading", { name: "No paused subscriptions" })).toBeInTheDocument();
+    });
+  });
+
+  describe("Pause all", () => {
+    it("is hidden when there are no active subscriptions", () => {
+      subsState = loaded([sub(1, SubStatus.Paused), sub(2, SubStatus.Cancelled)]);
+      render(<MySubscriptionsPage />);
+
+      expect(screen.queryByRole("button", { name: "Pause all" })).not.toBeInTheDocument();
+    });
+
+    it("is hidden while loading", () => {
+      render(<MySubscriptionsPage />);
+      expect(screen.queryByRole("button", { name: "Pause all" })).not.toBeInTheDocument();
+    });
+
+    it("is visible when at least one subscription is active", () => {
+      subsState = loaded([sub(1, SubStatus.Active), sub(2, SubStatus.Paused)]);
+      render(<MySubscriptionsPage />);
+
+      expect(screen.getByRole("button", { name: "Pause all" })).toBeInTheDocument();
+    });
+
+    it("opens a confirmation dialog listing the subscriptions to pause", async () => {
+      subsState = loaded([
+        sub(1, SubStatus.Active),
+        sub(2, SubStatus.Active),
+        sub(3, SubStatus.Paused),
+      ]);
+      render(<MySubscriptionsPage />);
+
+      await userEvent.click(screen.getByRole("button", { name: "Pause all" }));
+
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toBeInTheDocument();
+      expect(within(dialog).getByText(/Subscription #1/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Subscription #2/)).toBeInTheDocument();
+      expect(within(dialog).queryByText(/Subscription #3/)).not.toBeInTheDocument();
+    });
+
+    it("does not pause anything when the dialog is cancelled", async () => {
+      subsState = loaded([sub(1, SubStatus.Active)]);
+      render(<MySubscriptionsPage />);
+
+      await userEvent.click(screen.getByRole("button", { name: "Pause all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(txRun).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("runs pauseSubscription for each active sub and shows per-sub results", async () => {
+      subsState = loaded([
+        sub(1, SubStatus.Active),
+        sub(2, SubStatus.Active),
+        sub(3, SubStatus.Paused),
+      ]);
+      render(<MySubscriptionsPage />);
+
+      await userEvent.click(screen.getByRole("button", { name: "Pause all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => expect(txRun).toHaveBeenCalledTimes(2));
+      expect(pauseSubscription).toHaveBeenCalledWith(1);
+      expect(pauseSubscription).toHaveBeenCalledWith(2);
+      expect(pauseSubscription).not.toHaveBeenCalledWith(3);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Subscription #1.*paused/i)).toBeInTheDocument();
+        expect(screen.getByText(/Subscription #2.*paused/i)).toBeInTheDocument();
+      });
+    });
+
+    it("shows a failure result for subscriptions that fail to pause", async () => {
+      txRunImpl = async (_fn, args) => {
+        const id = (args[0] as { id: number }).id;
+        return id === 2
+          ? { ok: false, error: "boom" }
+          : { ok: true, hash: "HASH" };
+      };
+      subsState = loaded([sub(1, SubStatus.Active), sub(2, SubStatus.Active)]);
+      render(<MySubscriptionsPage />);
+
+      await userEvent.click(screen.getByRole("button", { name: "Pause all" }));
+      await userEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/Subscription #1.*paused/i)).toBeInTheDocument();
+        expect(screen.getByText(/Subscription #2.*failed/i)).toBeInTheDocument();
+      });
     });
   });
 });
