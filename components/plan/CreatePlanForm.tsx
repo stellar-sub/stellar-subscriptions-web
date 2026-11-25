@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { TxProgress } from '@/components/tx/TxProgress';
+import { TxProgress } from '@/components/ui/TxProgress';
 import { TokenSelect } from '@/components/plan/TokenSelect';
 import { useTx } from '@/hooks/useTx';
-import { PLAN_ERRORS } from '@/lib/errors';
-import { nativeTokenId, type TokenInfo } from '@/lib/contracts';
+import { invalidatePlans } from '@/hooks/usePlans';
+import { createPlan, nativeTokenId, type TokenInfo } from '@/lib/contracts';
 
 export interface CreatePlanFormProps {
   /** Called after the create-plan transaction succeeds. */
@@ -97,6 +97,11 @@ export function CreatePlanForm({ onCreated }: CreatePlanFormProps) {
 
   const tokenBlocked = token.error !== null || token.info === null;
 
+  const capTooSmall =
+    defaultCap !== null &&
+    amountPerPeriod !== null &&
+    defaultCap < amountPerPeriod;
+
   const canSubmit =
     !tokenBlocked &&
     amountPerPeriod !== null &&
@@ -104,6 +109,7 @@ export function CreatePlanForm({ onCreated }: CreatePlanFormProps) {
     charges !== null &&
     periodDays !== null &&
     merchant.trim() !== '' &&
+    !capTooSmall &&
     phase !== 'signing' &&
     phase !== 'submitting';
 
@@ -135,25 +141,28 @@ export function CreatePlanForm({ onCreated }: CreatePlanFormProps) {
       setFormError('The cap could not be computed. Check the amount and number of charges.');
       return;
     }
+    if (capTooSmall) {
+      setFormError('Cap must cover at least one charge');
+      return;
+    }
     if (merchant.trim() === '') {
       setFormError('Enter the merchant address that will receive charges.');
       return;
     }
 
     try {
-      const result = await run({
-        contractErrors: PLAN_ERRORS,
-        build: async (client) =>
-          client.createPlan({
-            merchant: merchant.trim(),
-            token: token.tokenId,
-            amountPerPeriod,
-            periodDays,
-            defaultCap,
-          }),
-      });
-      if (result && typeof result === 'object' && 'planId' in result) {
-        onCreated?.(String((result as { planId: unknown }).planId));
+      const result = await run((ctx) =>
+        createPlan(ctx, {
+          name: '',
+          token: token.tokenId,
+          amountPerPeriod,
+          intervalLedgers: periodDays * 17280,
+          defaultCap,
+        }),
+      );
+      if (result !== null) {
+        invalidatePlans();
+        onCreated?.(String(result.id));
       }
     } catch {
       // Errors are surfaced through `error` from useTx.
@@ -168,16 +177,30 @@ export function CreatePlanForm({ onCreated }: CreatePlanFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <TokenSelect
-        value={token.tokenId}
-        onChange={(selection) =>
-          setToken({
-            tokenId: selection.tokenId,
-            info: selection.info,
-            error: selection.error,
-          })
-        }
-      />
+      <div className="flex flex-col gap-2">
+        <TokenSelect
+          value={token.tokenId}
+          onChange={(selection) =>
+            setToken({
+              tokenId: selection.tokenId,
+              info: selection.info,
+              error: selection.error,
+            })
+          }
+        />
+        <p className="text-xs text-gray-600">
+          Not sure which token to use? Read the{' '}
+          <a
+            href="/docs/token-support.md"
+            className="underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            token support guide
+          </a>{' '}
+          to learn which tokens are accepted and how to find a token contract id.
+        </p>
+      </div>
 
       {tokenBlocked && (
         <p className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">

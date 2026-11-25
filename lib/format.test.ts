@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fc from "fast-check";
-import { formatAmount, parseAmount } from "./format";
+import { formatAmount, isValidStellarAddress, parseAmount, shortAddress } from "./format";
 
 /**
  * Property tests: formatting a raw amount and parsing it back must yield the
@@ -9,16 +9,28 @@ import { formatAmount, parseAmount } from "./format";
 
 const decimalsArb = fc.integer({ min: 0, max: 18 });
 
+// Arbitrary positive raw amounts (unbounded above).
+const amountArb = fc.bigInt({ min: 1n });
+
 // Raw amounts up to a very large magnitude (well beyond typical token supply).
-const amountArb = fc.bigInt({ min: 1n, max: 10n ** 30n });
+const boundedAmountArb = fc.bigInt({ min: 1n, max: 10n ** 30n });
 
 const roundTrip = (value: bigint, decimals: number): bigint | null =>
   parseAmount(formatAmount(value, decimals), decimals);
 
 describe("formatAmount / parseAmount round-trip", () => {
-  it("holds for generated amounts and decimals", () => {
+  it("holds for arbitrary bigints and decimals without precision loss", () => {
     fc.assert(
       fc.property(amountArb, decimalsArb, (value, decimals) => {
+        expect(roundTrip(value, decimals)).toBe(value);
+      }),
+      { numRuns: 1000 },
+    );
+  });
+
+  it("holds for generated amounts and decimals", () => {
+    fc.assert(
+      fc.property(boundedAmountArb, decimalsArb, (value, decimals) => {
         expect(roundTrip(value, decimals)).toBe(value);
       }),
       { numRuns: 500 },
@@ -73,7 +85,7 @@ describe("formatAmount / parseAmount round-trip", () => {
     let smallest: bigint | null = null;
     try {
       fc.assert(
-        fc.property(amountArb, decimalsArb, (value, decimals) => {
+        fc.property(boundedAmountArb, decimalsArb, (value, decimals) => {
           expect(broken(value, decimals)).toBe(value);
         }),
         { numRuns: 100 },
@@ -86,5 +98,57 @@ describe("formatAmount / parseAmount round-trip", () => {
 
     // The shrunk counterexample should be the smallest positive amount.
     expect(smallest).toBe(1n);
+  });
+});
+
+const VALID_ADDRESS = "GBKAVFZ5GCZMMIV3ZKZL5USKFYT5DBBZTY4P5V5J75ANHWTX7GASETK4";
+
+describe("isValidStellarAddress", () => {
+  it("accepts a well-formed G-address", () => {
+    expect(isValidStellarAddress(VALID_ADDRESS)).toBe(true);
+  });
+
+  it("rejects an address with a wrong first character", () => {
+    expect(isValidStellarAddress("XBKAVFZ5GCZMMIV3ZKZL5USKFYT5DBBZTY4P5V5J75ANHWTX7GASETK4")).toBe(false);
+  });
+
+  it("rejects an address that is one character too short", () => {
+    expect(isValidStellarAddress(VALID_ADDRESS.slice(1))).toBe(false);
+  });
+
+  it("rejects an address that is one character too long", () => {
+    expect(isValidStellarAddress(VALID_ADDRESS + "A")).toBe(false);
+  });
+
+  it("rejects an empty string", () => {
+    expect(isValidStellarAddress("")).toBe(false);
+  });
+
+  it("rejects a contract address (C-prefix)", () => {
+    expect(isValidStellarAddress("CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC")).toBe(false);
+  });
+});
+
+describe("shortAddress", () => {
+  it("returns a 4-character address unchanged with keep=4", () => {
+    const short = "ABCD";
+    expect(short.length).toBe(4);
+    const result = shortAddress(short, 4);
+    expect(result).toBe(short);
+  });
+
+  it("returns an address at the exact boundary length unchanged", () => {
+    // boundary = keep * 2 + 1 = 4 * 2 + 1 = 9
+    const boundary = "ABCDEFGHI";
+    expect(boundary.length).toBe(9);
+    const result = shortAddress(boundary, 4);
+    expect(result).toBe(boundary);
+  });
+
+  it("truncates an address longer than the boundary", () => {
+    const long = "ABCDEFGHIJ";
+    expect(long.length).toBe(10);
+    const result = shortAddress(long, 4);
+    expect(result).toBe("ABCD…GHIJ");
   });
 });

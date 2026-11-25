@@ -34,7 +34,11 @@ export function AuthorizationSummary({
   const lastChargeAfter = Number(charges - 1n) * intervalLedgers;
 
   return (
-    <section aria-labelledby="authorization-heading" className="card space-y-4 border-brand/40 bg-brand/5 p-5">
+    <section
+      id="authorization-summary"
+      aria-labelledby="authorization-heading"
+      className="card space-y-4 border-brand/40 bg-brand/5 p-5"
+    >
       <h3 id="authorization-heading" className="font-semibold text-fg">
         What you&apos;re authorizing
       </h3>

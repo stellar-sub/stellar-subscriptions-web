@@ -49,6 +49,13 @@ const SCREENS: Screen[] = [
 
 const THEMES: Theme[] = ["dark", "light"];
 
+/**
+ * Renders the loading skeleton and the real card in the same grid cell so any
+ * divergence in their layout shows up as a visual diff. The skeleton is
+ * captured first, then the card replaces it in place.
+ */
+const PLAN_CARD_LAYOUT_PATH = "/__visual/plan-card-layout";
+
 async function applyTheme(page: Page, theme: Theme) {
   await page.emulateMedia({ colorScheme: theme });
   await page.addInitScript((value) => {
@@ -58,6 +65,40 @@ async function applyTheme(page: Page, theme: Theme) {
       // Storage is unavailable on about:blank; the real page still gets it.
     }
   }, theme);
+}
+
+for (const theme of THEMES) {
+  test(`plan-card skeleton matches card layout in ${theme}`, async ({ page }) => {
+    const unmocked = await mockSorobanRpc(page);
+    await installFakeFreighter(page, { address: null });
+    await applyTheme(page, theme);
+
+    await page.goto(PLAN_CARD_LAYOUT_PATH);
+
+    const html = page.locator("html");
+    if (theme === "dark") await expect(html).toHaveClass(/\bdark\b/);
+    else await expect(html).not.toHaveClass(/\bdark\b/);
+    await page.evaluate(() => document.fonts.ready);
+
+    const stage = page.getByTestId("plan-card-layout-stage");
+    await expect(stage).toBeVisible();
+
+    // Skeleton first: the placeholder must occupy the same box as the card.
+    await expect(stage.getByTestId("plan-skeleton")).toBeVisible();
+    await expect(stage.getByTestId("plan-card")).toHaveCount(0);
+    const skeletonBox = await stage.boundingBox();
+    await expect(stage).toHaveScreenshot(`plan-skeleton-${theme}.png`);
+
+    // Then the real card, rendered at the same dimensions.
+    await stage.getByTestId("plan-card-layout-toggle").click();
+    await expect(stage.getByTestId("plan-card")).toBeVisible();
+    await expect(stage.getByTestId("plan-skeleton")).toHaveCount(0);
+    const cardBox = await stage.boundingBox();
+    await expect(stage).toHaveScreenshot(`plan-card-${theme}.png`);
+
+    expect(cardBox, "card and skeleton must share the same stage box").toEqual(skeletonBox);
+    expect(unmocked, "every contract read should be answered by a fixture").toEqual([]);
+  });
 }
 
 for (const screen of SCREENS) {

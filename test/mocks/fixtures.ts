@@ -23,6 +23,25 @@ export const simulateTransactionResponse = {
   },
 };
 
+// Native (scValToNative) shape returned by the subscription contract's
+// `get_plan` entry point. Used to round-trip `decodePlan`.
+export const planFixture = {
+  id: 42n,
+  merchant: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+  amount: 5_000_000n,
+  interval_seconds: 2_592_000n,
+  active: true,
+};
+
+// Native (scValToNative) shape returned by the registry contract's
+// `get_stats` entry point. `totalChargedVolume` is a bigint near
+// Number.MAX_SAFE_INTEGER to exercise the `toNumber` guard.
+export const registryStatsFixture = {
+  totalSubscriptions: 128n,
+  activeSubscriptions: 96n,
+  totalChargedVolume: BigInt(Number.MAX_SAFE_INTEGER) - 1n,
+};
+
 // Recorded response for a `getEvents` call filtered on the subscription
 // contract's `charged` topic.
 export const getEventsResponse = {

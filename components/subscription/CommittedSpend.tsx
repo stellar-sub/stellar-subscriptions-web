@@ -1,5 +1,6 @@
 import { committedByToken } from "@/lib/subscription";
-import { TokenAmount } from "@/components/ui/TokenAmount";
+import { useToken } from "@/hooks/useToken";
+import { formatToken } from "@/lib/format";
 import type { Subscription } from "@/types";
 
 /**
@@ -19,9 +20,7 @@ export function CommittedSpend({ subs }: { subs: Subscription[] }) {
       ) : (
         <ul className="flex flex-wrap gap-x-8 gap-y-1">
           {totals.map(([token, total]) => (
-            <li key={token} className="text-2xl font-semibold text-fg">
-              <TokenAmount token={token} value={total} />
-            </li>
+            <CommittedSpendRow key={token} token={token} value={total} />
           ))}
         </ul>
       )}
@@ -30,5 +29,35 @@ export function CommittedSpend({ subs }: { subs: Subscription[] }) {
         every opportunity. It&apos;s a ceiling, not a bill — you can lower it any time by pausing or cancelling.
       </p>
     </section>
+  );
+}
+
+function CommittedSpendRow({ token, value }: { token: string; value: bigint }) {
+  const { data, isLoading, isError } = useToken(token);
+
+  if (isLoading) {
+    return (
+      <li className="text-2xl font-semibold text-fg">
+        <span className="text-muted" aria-busy="true">
+          Loading…
+        </span>
+      </li>
+    );
+  }
+
+  if (isError || !data) {
+    return (
+      <li className="text-2xl font-semibold text-fg">
+        <span className="text-muted" role="alert">
+          Unable to load token
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li className="text-2xl font-semibold text-fg">
+      {formatToken(value, data.symbol, data.decimals)}
+    </li>
   );
 }

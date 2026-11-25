@@ -33,6 +33,9 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+/** Identical messages shown within this window are collapsed into one toast. */
+const DEDUPE_WINDOW_MS = 2000;
+
 const TONE_STYLES: Record<ToastTone, string> = {
   info: "border-slate-300 bg-white text-slate-900",
   success: "border-emerald-300 bg-emerald-50 text-emerald-900",
@@ -48,6 +51,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const lastShown = useRef<Map<string, { id: number; at: number }>>(
+    new Map(),
+  );
 
   const dismiss = useCallback((id: number) => {
     const timer = timers.current.get(id);
@@ -60,7 +66,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback(
     (message: string, options: ToastOptions = {}) => {
+      const now = Date.now();
+      const previous = lastShown.current.get(message);
+      if (previous && now - previous.at < DEDUPE_WINDOW_MS) {
+        return previous.id;
+      }
       const id = nextId.current++;
+      lastShown.current.set(message, { id, at: now });
       const tone = options.tone ?? "info";
       setToasts((current) => [...current, { id, message, tone }]);
       const duration = options.duration ?? 6000;

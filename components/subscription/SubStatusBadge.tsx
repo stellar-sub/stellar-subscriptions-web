@@ -4,22 +4,22 @@ const BADGES: Record<SubStatus, { label: string; hint: string; tone: string }> =
   [SubStatus.Active]: {
     label: "Active",
     hint: "The merchant can charge once per interval, up to your cap.",
-    tone: "border-ok/30 bg-ok/10 text-ok",
+    tone: "border-ok/40 bg-ok/15 text-ok-strong",
   },
   [SubStatus.Paused]: {
     label: "Paused",
     hint: "No charges can happen until you resume.",
-    tone: "border-warn/30 bg-warn/10 text-warn",
+    tone: "border-warn/40 bg-warn/15 text-warn-strong",
   },
   [SubStatus.Cancelled]: {
     label: "Cancelled",
     hint: "Final. No further charges can ever happen.",
-    tone: "border-line bg-raised text-muted",
+    tone: "border-line bg-raised text-fg",
   },
   [SubStatus.Exhausted]: {
     label: "Cap reached",
     hint: "The full cap has been charged. No further charges are possible.",
-    tone: "border-line bg-raised text-muted",
+    tone: "border-line bg-raised text-fg",
   },
 };
 

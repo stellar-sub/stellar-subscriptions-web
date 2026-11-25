@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { nativeTokenId, getTokenInfo } from '@/lib/contracts';
+import { useWallet } from '@/lib/wallet';
 
 export type TokenSelectMode = 'native' | 'custom';
 
@@ -129,6 +130,23 @@ export default function TokenSelect({
   const [pasted, setPasted] = useState<string>(() =>
     value && value !== nativeId ? value : '',
   );
+  const [networkChanged, setNetworkChanged] = useState(false);
+
+  // Watch the wallet network so a stale token id from the previous network is
+  // never submitted (it would cause a ContractError).
+  const { network: walletNetwork } = useWallet();
+  const watchedNetwork = walletNetwork ?? network;
+  const prevNetworkRef = useRef(watchedNetwork);
+
+  useEffect(() => {
+    if (prevNetworkRef.current === watchedNetwork) return;
+    prevNetworkRef.current = watchedNetwork;
+
+    // Clear any custom selection made on the previous network.
+    setPasted('');
+    setMode('native');
+    setNetworkChanged(true);
+  }, [watchedNetwork]);
 
   // Keep internal mode in sync if the controlled value changes externally.
   useEffect(() => {
@@ -178,6 +196,7 @@ export default function TokenSelect({
 
   const handlePasteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPasted(e.target.value);
+    if (networkChanged) setNetworkChanged(false);
   };
 
   return (
@@ -236,6 +255,10 @@ export default function TokenSelect({
       )}
 
       <div id={`${fieldId}-status`} aria-live="polite" className="text-sm">
+        {networkChanged && (
+          <p className="text-amber-600">Network changed — please re-enter the token</p>
+        )}
+
         {mode === 'native' && (
           <p className="text-gray-600">
             Plans are billed in native XLM. Charges follow the plan schedule and never exceed the

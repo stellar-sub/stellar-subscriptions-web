@@ -56,6 +56,18 @@ export default function PlansPage() {
         <>
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
+              <label htmlFor="plan-search" className="sr-only">
+                Search plans
+              </label>
+              <input
+                id="plan-search"
+                type="search"
+                placeholder="Search plans"
+                className="rounded border border-border bg-surface px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
               <label htmlFor="sort-by" className="text-sm font-medium text-muted">
                 Sort by:
               </label>

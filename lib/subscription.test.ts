@@ -83,6 +83,49 @@ describe("committed spend", () => {
     expect(totals.get("CUSD")).toBe(500n);
     expect(totals.size).toBe(2);
   });
+
+  it("returns an empty map for empty input", () => {
+    const totals = committedByToken([]);
+    expect(totals.size).toBe(0);
+    expect([...totals.keys()]).toEqual([]);
+  });
+
+  it("accumulates the remaining chargeable amount for a single token", () => {
+    const totals = committedByToken([sub({ totalCharged: 300n })]);
+    expect(totals.get("CXLM")).toBe(900n);
+    expect(totals.size).toBe(1);
+  });
+
+  it("aggregates two tokens separately", () => {
+    const totals = committedByToken([
+      sub({ id: 1, totalCharged: 200n }),
+      sub({ id: 2, totalCharged: 400n }),
+      sub({ id: 3, token: "CUSD", totalCap: 500n, amountPerPeriod: 50n }),
+    ]);
+    expect(totals.get("CXLM")).toBe(800n);
+    expect(totals.get("CUSD")).toBe(500n);
+    expect(totals.size).toBe(2);
+  });
+
+  it("skips cancelled and other final subscriptions", () => {
+    const totals = committedByToken([
+      sub({ id: 1, status: SubStatus.Cancelled, totalCharged: 300n }),
+      sub({ id: 2, status: SubStatus.Exhausted, totalCharged: 1_200n }),
+      sub({ id: 3, token: "CUSD", totalCap: 500n, amountPerPeriod: 50n }),
+    ]);
+    expect(totals.has("CXLM")).toBe(false);
+    expect(totals.get("CUSD")).toBe(500n);
+    expect(totals.size).toBe(1);
+  });
+
+  it("contributes 0 when totalCap is below totalCharged", () => {
+    const totals = committedByToken([
+      sub({ id: 1, totalCap: 100n, totalCharged: 300n }),
+      sub({ id: 2, token: "CUSD", totalCap: 500n, amountPerPeriod: 50n }),
+    ]);
+    expect(totals.get("CXLM")).toBe(0n);
+    expect(totals.get("CUSD")).toBe(500n);
+  });
 });
 
 describe("due subscriptions", () => {
@@ -136,12 +179,21 @@ describe("due subscriptions", () => {
 describe("display order", () => {
   it("puts active first, then paused, then ended, newest first within each", () => {
     const ordered = sortForDisplay([
-      sub({ id: 1, status: SubStatus.Cancelled }),
-      sub({ id: 2, status: SubStatus.Paused }),
-      sub({ id: 3 }),
-      sub({ id: 4 }),
-      sub({ id: 5, status: SubStatus.Exhausted }),
+      sub({ id: 1, status: SubStatus.Cancelled, nextChargeLedger: 100 }),
+      sub({ id: 2, status: SubStatus.Paused, nextChargeLedger: 200 }),
+      sub({ id: 3, nextChargeLedger: 300 }),
+      sub({ id: 4, nextChargeLedger: 400 }),
+      sub({ id: 5, status: SubStatus.Exhausted, nextChargeLedger: 500 }),
     ]);
     expect(ordered.map((s) => s.id)).toEqual([4, 3, 2, 5, 1]);
+  });
+
+  it("breaks ties within a rank by ascending next charge ledger, not id", () => {
+    const ordered = sortForDisplay([
+      sub({ id: 1, nextChargeLedger: 900 }),
+      sub({ id: 2, nextChargeLedger: 300 }),
+      sub({ id: 3, nextChargeLedger: 600 }),
+    ]);
+    expect(ordered.map((s) => s.id)).toEqual([2, 3, 1]);
   });
 });

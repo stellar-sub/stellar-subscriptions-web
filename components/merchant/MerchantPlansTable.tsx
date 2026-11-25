@@ -1,10 +1,14 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import type { Plan } from '@/lib/types';
-import { PlanBadge } from '@/components/merchant/PlanBadge';
-import { TokenAmount } from '@/components/TokenAmount';
-import { describeInterval } from '@/lib/format';
+import Link from "next/link";
+import { describeInterval } from "@/lib/format";
+import { PlanBadge } from "@/components/plan/PlanBadge";
+import { TokenAmount } from "@/components/ui/TokenAmount";
+import type { Plan } from "@/types";
+
+/** Tooltip text explaining why the name field is read-only. */
+const RENAME_LIMITATION =
+  "Plan names are stored on-chain at creation time. The plan contract does not expose an update function, so the name cannot be changed after the plan is published.";
 
 interface MerchantPlansTableProps {
   plans: Plan[];
@@ -13,7 +17,7 @@ interface MerchantPlansTableProps {
 export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
   if (!plans || plans.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-sm text-gray-500">
+      <div className="rounded-lg border border-dashed border-line p-8 text-center text-sm text-muted">
         You have not published any plans yet.
       </div>
     );
@@ -21,19 +25,23 @@ export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
 
   return (
     <div>
-      {/* Stacked cards on narrow screens */}
-      <ul className="space-y-3 md:hidden">
+      {/* ── Stacked cards on narrow screens ──────────────────────────────── */}
+      <ul className="space-y-3 md:hidden" aria-label="Your plans">
         {plans.map((plan) => (
-          <li
-            key={plan.id}
-            className="rounded-lg border border-gray-200 p-4 shadow-sm"
-          >
+          <li key={plan.id} className="card p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium text-gray-900">{plan.name}</p>
-                <p className="mt-1 text-sm text-gray-600">
-                  <TokenAmount amount={plan.amount} token={plan.token} />
-                  {' · '}
+                {/* Name with limitation note */}
+                <p className="truncate font-medium text-fg">{plan.name}</p>
+                <p
+                  className="mt-0.5 text-xs text-muted"
+                  title={RENAME_LIMITATION}
+                >
+                  Name cannot be changed after creation.
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  <TokenAmount token={plan.token} value={plan.amountPerPeriod} />
+                  {" · "}
                   {describeInterval(plan.intervalLedgers)}
                 </p>
               </div>
@@ -41,19 +49,17 @@ export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
             </div>
             <dl className="mt-3 space-y-1 text-sm">
               <div className="flex justify-between gap-3">
-                <dt className="text-gray-500">Suggested cap</dt>
-                <dd className="text-right text-gray-900">
-                  <TokenAmount amount={plan.defaultCap} token={plan.token} />
+                <dt className="text-muted">Suggested cap</dt>
+                <dd className="text-right text-fg">
+                  <TokenAmount token={plan.token} value={plan.defaultCap} />
                 </dd>
               </div>
             </dl>
-            <p className="mt-1 text-xs text-gray-500">
-              Subscribers choose their own cap.
-            </p>
+            <p className="mt-1 text-xs text-muted">Subscribers choose their own cap.</p>
             <div className="mt-3">
               <Link
                 href={`/plans/${plan.id}`}
-                className="text-sm font-medium text-blue-600 hover:underline"
+                className="text-sm font-medium text-brand hover:underline"
               >
                 View public page
               </Link>
@@ -62,11 +68,11 @@ export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
         ))}
       </ul>
 
-      {/* Table on md+ */}
+      {/* ── Table on md+ ─────────────────────────────────────────────────── */}
       <div className="hidden overflow-x-auto md:block">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
+        <table className="min-w-full divide-y divide-line text-sm">
           <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr className="text-left text-xs uppercase tracking-wide text-muted">
               <th scope="col" className="px-3 py-2 font-medium">
                 Name
               </th>
@@ -87,21 +93,28 @@ export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-line">
             {plans.map((plan) => (
               <tr key={plan.id}>
-                <td className="px-3 py-3 font-medium text-gray-900">
-                  {plan.name}
+                <td className="px-3 py-3">
+                  <span className="font-medium text-fg">{plan.name}</span>
+                  {/* Limitation notice below the name */}
+                  <span
+                    className="mt-0.5 block text-xs text-muted"
+                    title={RENAME_LIMITATION}
+                  >
+                    Name cannot be changed after creation.
+                  </span>
                 </td>
-                <td className="px-3 py-3 text-gray-700">
-                  <TokenAmount amount={plan.amount} token={plan.token} />
+                <td className="px-3 py-3 text-fg">
+                  <TokenAmount token={plan.token} value={plan.amountPerPeriod} />
                 </td>
-                <td className="px-3 py-3 text-gray-700">
+                <td className="px-3 py-3 text-fg">
                   {describeInterval(plan.intervalLedgers)}
                 </td>
-                <td className="px-3 py-3 text-gray-700">
-                  <TokenAmount amount={plan.defaultCap} token={plan.token} />
-                  <span className="block text-xs text-gray-500">
+                <td className="px-3 py-3 text-fg">
+                  <TokenAmount token={plan.token} value={plan.defaultCap} />
+                  <span className="block text-xs text-muted">
                     Subscribers choose their own cap.
                   </span>
                 </td>
@@ -111,7 +124,7 @@ export function MerchantPlansTable({ plans }: MerchantPlansTableProps) {
                 <td className="px-3 py-3 text-right">
                   <Link
                     href={`/plans/${plan.id}`}
-                    className="text-sm font-medium text-blue-600 hover:underline"
+                    className="text-sm font-medium text-brand hover:underline"
                   >
                     View public page
                   </Link>

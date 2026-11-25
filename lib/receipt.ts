@@ -13,6 +13,18 @@ export interface ChargeEvent {
 }
 
 /**
+ * Escape HTML metacharacters so values can be safely interpolated into HTML.
+ */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Generate a plain-text receipt for a charge event
  * Suitable for printing or downloading
  */
@@ -65,12 +77,19 @@ export function generateReceiptHTML(charge: ChargeEvent): string {
     minute: "2-digit",
   });
 
+  const safeAmount = escapeHtml(charge.amount);
+  const safeToken = escapeHtml(charge.token);
+  const safeMerchant = escapeHtml(charge.merchant);
+  const safeHash = escapeHtml(charge.hash);
+  const safeDate = escapeHtml(formattedDate);
+  const safeTime = escapeHtml(formattedTime);
+
   return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Receipt - ${charge.amount} ${charge.token}</title>
+  <title>Receipt - ${safeAmount} ${safeToken}</title>
   <style>
     body {
       font-family: system-ui, -apple-system, sans-serif;
@@ -124,20 +143,20 @@ export function generateReceiptHTML(charge: ChargeEvent): string {
     <h1>Charge Receipt</h1>
     <div class="row">
       <span class="label">Date</span>
-      <span class="value">${formattedDate} at ${formattedTime}</span>
+      <span class="value">${safeDate} at ${safeTime}</span>
     </div>
     <div class="row">
       <span class="label">Amount</span>
-      <span class="value"><strong>${charge.amount} ${charge.token}</strong></span>
+      <span class="value"><strong>${safeAmount} ${safeToken}</strong></span>
     </div>
     <div class="row">
       <span class="label">Merchant</span>
-      <span class="value">${charge.merchant}</span>
+      <span class="value">${safeMerchant}</span>
     </div>
     <div class="divider"></div>
     <div class="row">
       <span class="label">Transaction Hash</span>
-      <span class="value"><code>${charge.hash}</code></span>
+      <span class="value"><code>${safeHash}</code></span>
     </div>
     <div class="footer">
       <p>This receipt confirms that the charge has been processed on the Stellar blockchain.</p>

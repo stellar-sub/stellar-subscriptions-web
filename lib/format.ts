@@ -8,9 +8,10 @@
  */
 
 import { formatDuration, intervalToDuration, type Duration } from "date-fns";
+import { StrKey } from "@stellar/stellar-sdk";
+import { LEDGER_SECONDS } from "@/lib/stellar";
 
-/** Approximate seconds per ledger on Stellar. */
-export const LEDGER_SECONDS = 5;
+export { LEDGER_SECONDS };
 
 export interface IntervalPreset {
   label: string;
@@ -177,10 +178,19 @@ export function approxDuration(ledgers: number): string {
  */
 export function formatEstimatedDate(ledgers: number, from: Date = new Date()): string {
   const target = new Date(from.getTime() + Math.max(0, ledgers) * LEDGER_SECONDS * 1000);
+  return formatDateTime(target);
+}
+
+/**
+ * A date and time in the user's locale, e.g. `"Jan 2, 2025, 3:45 PM"`. Shared
+ * with {@link formatEstimatedDate} so the estimated-date label and any other
+ * wall-clock date stay formatted the same way.
+ */
+export function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat(LOCALE, {
     dateStyle: "medium",
     timeStyle: "short",
-  }).format(target);
+  }).format(date);
 }
 
 /**
@@ -224,7 +234,6 @@ export function normalizeTo30Days(amountPerPeriod: bigint, intervalLedgers: numb
 export function isValidStellarAddress(address: string): boolean {
   if (typeof address !== "string") return false;
   try {
-    const { StrKey } = require("@stellar/stellar-sdk");
     return StrKey.isValidEd25519PublicKey(address);
   } catch {
     return false;

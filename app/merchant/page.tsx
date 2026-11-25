@@ -2,12 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { RequireWallet } from '@/components/RequireWallet';
-import { EmptyState } from '@/components/EmptyState';
+import { RequireWallet } from '@/components/wallet/RequireWallet';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { AddressLink } from '@/components/ui/AddressLink';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { useWallet } from '@/hooks/useWallet';
-import { useMerchantPlans } from '@/hooks/useMerchantPlans';
+import { useMerchantPlans } from '@/hooks/usePlans';
 import { useToken } from '@/hooks/useToken';
-import { getTokenBalance } from '@/lib/token';
+import { getTokenBalance } from '@/lib/contracts';
+import { MerchantChargedToday } from '@/components/merchant/ChargedToday';
 
 const SHARE_FLAG_KEY = 'merchant:hasSharedPlanLink';
 
@@ -122,6 +125,13 @@ export default function MerchantDashboardPage() {
             <p className="mt-1 text-sm text-gray-600">
               Manage your subscription plans and share them with customers.
             </p>
+            {address && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                <span className="sr-only">Connected address</span>
+                <AddressLink address={address} />
+                <CopyButton value={address} />
+              </div>
+            )}
           </div>
           <Link
             href="/merchant/plans/new"
@@ -130,6 +140,8 @@ export default function MerchantDashboardPage() {
             Create a plan
           </Link>
         </header>
+
+        {address && <MerchantChargedToday merchant={address} />}
 
         {showChecklist && (
           <section

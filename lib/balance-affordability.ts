@@ -7,7 +7,7 @@
  * Calculate how many more charges a token balance can afford given committed spend
  * Returns a human-readable string describing the affordability
  */
-export function describeAffordability(
+export function formatAffordability(
   balance: bigint,
   amountPerCharge: bigint,
   token: string
@@ -77,7 +77,7 @@ export function getAffordabilityInfo(
     const shortfall = committedSpend - balance;
     message = `Balance short by ${shortfall} ${token}. `;
   }
-  message += describeAffordability(balance, amountPerCharge, token);
+  message += formatAffordability(balance, amountPerCharge, token);
 
   return {
     sufficient,

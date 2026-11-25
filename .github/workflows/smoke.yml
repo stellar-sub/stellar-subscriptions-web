@@ -1,0 +1,81 @@
+name: Nightly Testnet Smoke Test
+
+on:
+  schedule:
+    # Run nightly at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    name: Testnet Smoke Test
+    runs-on: ubuntu-latest
+    # Skip on forks; only run in the canonical repository
+    if: github.repository == 'stellar-sub/stellar-subscriptions-web'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Testnet smoke test
+        run: node --input-type=module scripts/smoke-testnet.mjs
+        env:
+          STELLAR_NETWORK: testnet
+```
+
+File: scripts/smoke-testnet.mjs
+```javascript
+// Nightly Testnet smoke test.
+// Calls the actual deployed Testnet contracts via readContract to catch
+// Soroban RPC regressions before users do. Exits non-zero on any error so
+// GitHub Actions failure notifications alert maintainers.
+
+import { getPlan, getActivePlans, getRegistryStats } from '../lib/contracts.ts';
+
+async function main() {
+  const results = [];
+
+  // getRegistryStats
+  const stats = await getRegistryStats();
+  if (!stats) {
+    throw new Error('getRegistryStats returned no data');
+  }
+  results.push(['getRegistryStats', stats]);
+
+  // getActivePlans
+  const activePlans = await getActivePlans();
+  if (!Array.isArray(activePlans)) {
+    throw new Error('getActivePlans did not return an array');
+  }
+  results.push(['getActivePlans', `${activePlans.length} active plan(s)`]);
+
+  // getPlan — use the first active plan if available, otherwise plan id 1
+  const planId = activePlans.length > 0 ? activePlans[0].id ?? activePlans[0].planId ?? 1 : 1;
+  const plan = await getPlan(planId);
+  if (!plan) {
+    throw new Error(`getPlan(${planId}) returned no data`);
+  }
+  results.push(['getPlan', plan]);
+
+  for (const [name, value] of results) {
+    console.log(`[smoke] ${name}:`, value);
+  }
+
+  console.log('[smoke] All Testnet contract reads succeeded.');
+}
+
+main().catch((err) => {
+  console.error('[smoke] Testnet smoke test failed:', err);
+  process.exit(1);
+});
