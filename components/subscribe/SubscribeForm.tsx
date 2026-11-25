@@ -126,7 +126,13 @@ export function SubscribeForm({ plan, token }: { plan: Plan; token: TokenInfo })
       )}
 
       {address ? (
-        <button type="button" className="btn-primary w-full py-3" disabled={!canConfirm} onClick={() => void confirm()}>
+        <button
+          type="button"
+          className="btn-primary w-full py-3"
+          disabled={!canConfirm}
+          aria-describedby="authorization-summary"
+          onClick={() => void confirm()}
+        >
           {tx.pending ? "Subscribing…" : "Authorize and subscribe"}
         </button>
       ) : installed ? (

@@ -3,7 +3,11 @@
     "collect": {
       "startServerCommand": "npm run start",
       "startServerReadyPattern": "started server",
-      "url": ["http://localhost:3000/", "http://localhost:3000/plans"],
+      "url": [
+        "http://localhost:3000/",
+        "http://localhost:3000/plans",
+        "http://localhost:3000/subscriptions"
+      ],
       "numberOfRuns": 1,
       "settings": {
         "preset": "desktop"

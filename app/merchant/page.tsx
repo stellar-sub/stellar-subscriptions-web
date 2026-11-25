@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { RequireWallet } from '@/components/RequireWallet';
-import { EmptyState } from '@/components/EmptyState';
+import { RequireWallet } from '@/components/wallet/RequireWallet';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { AddressLink } from '@/components/ui/AddressLink';
+import { CopyButton } from '@/components/ui/CopyButton';
 import { useWallet } from '@/hooks/useWallet';
-import { useMerchantPlans } from '@/hooks/useMerchantPlans';
+import { useMerchantPlans } from '@/hooks/usePlans';
 import { useToken } from '@/hooks/useToken';
-import { getTokenBalance } from '@/lib/token';
+import { useMerchantStats } from '@/hooks/useMerchantStats';
+import { getTokenBalance } from '@/lib/contracts';
+import { MerchantChargedToday } from '@/components/merchant/ChargedToday';
 
 const SHARE_FLAG_KEY = 'merchant:hasSharedPlanLink';
 
@@ -23,6 +27,13 @@ export default function MerchantDashboardPage() {
   const { address, connect, isConnecting } = useWallet();
   const { plans, isLoading: plansLoading, error: plansError } = useMerchantPlans(address);
   const { token } = useToken();
+  const {
+    dueCount,
+    activeCount,
+    revenueThisMonth,
+    loading: statsLoading,
+    error: statsError,
+  } = useMerchantStats(address);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [hasShared, setHasShared] = useState(false);
@@ -60,6 +71,34 @@ export default function MerchantDashboardPage() {
 
   const hasPlans = plans.length > 0;
   const isFunded = balance !== null && balance > BigInt(0);
+
+  const trend = useMemo(() => {
+    if (revenueThisMonth === null || revenueThisMonth === undefined) return null;
+    const current = revenueThisMonth.currentWeek;
+    const previous = revenueThisMonth.previousWeek;
+    if (previous === BigInt(0)) {
+      return current > BigInt(0)
+        ? { direction: 'new' as const, label: 'New', className: 'bg-gray-100 text-gray-700' }
+        : { direction: 'flat' as const, label: '→ 0%', className: 'bg-gray-100 text-gray-700' };
+    }
+    const diff = current - previous;
+    const pct = Number((diff * BigInt(10000)) / previous) / 100;
+    if (diff > BigInt(0)) {
+      return {
+        direction: 'up' as const,
+        label: `▲ ${pct.toFixed(0)}%`,
+        className: 'bg-green-100 text-green-700',
+      };
+    }
+    if (diff < BigInt(0)) {
+      return {
+        direction: 'down' as const,
+        label: `▼ ${Math.abs(pct).toFixed(0)}%`,
+        className: 'bg-red-100 text-red-700',
+      };
+    }
+    return { direction: 'flat' as const, label: '→ 0%', className: 'bg-gray-100 text-gray-700' };
+  }, [revenueThisMonth]);
 
   const markShared = () => {
     setHasShared(true);
@@ -122,6 +161,13 @@ export default function MerchantDashboardPage() {
             <p className="mt-1 text-sm text-gray-600">
               Manage your subscription plans and share them with customers.
             </p>
+            {address && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
+                <span className="sr-only">Connected address</span>
+                <AddressLink address={address} />
+                <CopyButton value={address} />
+              </div>
+            )}
           </div>
           <Link
             href="/merchant/plans/new"
@@ -130,6 +176,50 @@ export default function MerchantDashboardPage() {
             Create a plan
           </Link>
         </header>
+
+        {address && (
+          <section aria-labelledby="stats-heading" className="mb-8">
+            <h2 id="stats-heading" className="sr-only">
+              Key metrics
+            </h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-600">Due subscriptions</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {statsLoading ? '…' : statsError ? '—' : dueCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-600">Active subscriptions</p>
+                <p className="mt-1 text-2xl font-semibold">
+                  {statsLoading ? '…' : statsError ? '—' : activeCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <p className="text-sm text-gray-600">Revenue this month</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-2xl font-semibold">
+                    {statsLoading
+                      ? '…'
+                      : statsError || !revenueThisMonth
+                        ? '—'
+                        : `${revenueThisMonth.total.toString()} ${token?.symbol ?? ''}`}
+                  </p>
+                  {trend && (
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${trend.className}`}
+                      aria-label={`Week-over-week revenue trend: ${trend.label}`}
+                    >
+                      {trend.label}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {address && <MerchantChargedToday merchant={address} />}
 
         {showChecklist && (
           <section

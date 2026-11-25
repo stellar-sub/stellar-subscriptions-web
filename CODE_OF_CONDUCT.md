@@ -29,6 +29,8 @@ This project handles payments. Contributors must not propose or merge changes
 that let a merchant charge more than a subscriber's authorized cap, or charge
 outside the agreed schedule, and must not present the UI as if they could.
 Reports of such issues are treated as security matters and are handled first.
+For how to report a vulnerability responsibly, including our response SLA and
+safe-harbour statement, see [SECURITY.md](SECURITY.md).
 
 ## Scope
 

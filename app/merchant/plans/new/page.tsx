@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import RequireWallet from '@/components/RequireWallet';
-import CreatePlanForm from '@/components/CreatePlanForm';
+import RequireWallet from '@/components/wallet/RequireWallet';
+import CreatePlanForm from '@/components/plan/CreatePlanForm';
 
 export default function NewPlanPage() {
   const [createdPlanId, setCreatedPlanId] = useState<string | null>(null);

@@ -58,9 +58,36 @@ flowchart TD
   4. `confirming`: poll `getTransaction` every 2 seconds for up to 60 seconds.
 
   Because simulation runs before signing, a contract rejection shows up as a message before the wallet is ever asked to sign.
-- `withRetry` retries three times, with backoff, only for transient failures such as rate limits, timeouts and network errors. Contract errors are never retried.
+- `withRetry` retries three times, with backoff, only for transient failures such as rate limits, timeouts and network errors. Contract errors are never retried. See [RPC Reliability](#rpc-reliability) for the exact policy.
 - `ContractError` is the error type the UI can show. It carries a `message` safe for people, an optional raw `detail` for the console, and an optional contract error `code`.
 - `explainError(raw, errors)` maps a simulation failure to a sentence. A `Error(Contract, #n)` string looks up the per-contract table. A balance or trustline message becomes "doesn't hold enough of this token". Anything else becomes a generic network message.
+
+### RPC Reliability
+
+Every RPC call that can fail transiently goes through `withRetry` in `lib/stellar.ts`. This section is for operators running the app against their own RPC node, especially one with rate limits.
+
+**Retry policy**
+
+- **Max 3 attempts** per call (the first try plus up to two retries).
+- **Back-off:** before attempt `n` (0-based), wait `300ms × 2^n` plus up to `200ms` of random jitter. So the delays are roughly 300ms, then 600ms, each with jitter.
+- **Only transient errors are retried:** HTTP 429 / rate-limit responses, timeouts, and network or fetch failures. Contract errors (a simulation that returns a contract rejection) are never retried — they are deterministic and are surfaced immediately through `explainError`.
+- **Non-transient errors fail fast.** Anything that is not recognised as transient is thrown on the first attempt.
+
+**Which calls are wrapped**
+
+`withRetry` wraps the RPC calls that are safe to repeat:
+
+- `simulateTransaction`
+- `getAccount`
+- `getTransaction`
+- `getLatestLedger`
+- `getHealth`
+
+Submission (`sendTransaction`) is not retried blindly; a `TRY_AGAIN_LATER` result becomes a `ContractError` instead, so a transaction is never double-sent by the retry layer.
+
+**What operators should expect**
+
+Behind a rate-limited RPC node, expect **up to 3 attempts per wrapped call**. A burst of reads (for example, several hooks loading at once) can therefore produce up to three times the request volume against your node before the app gives up and shows a network error. If you see repeated 429s exhausting the retries, raise the node's rate limit or point `NEXT_PUBLIC_*_RPC_URL` at a less constrained endpoint.
 
 ### `lib/contracts.ts`: the boundary
 
@@ -110,7 +137,67 @@ Read hooks are thin wrappers. For example, `useSubscriptions` calls `useAsync(()
 
 Write flows do not use `useAsync`. They use `useTx`.
 
+## Write Pipeline
+
+Every write in the app follows the same path. A component never touches signing, submission or confirmation directly; it hands an action to `useTx`, and the action receives a `WriteCtx` that carries the wallet wiring.
+
+```mermaid
+flowchart LR
+  Run["useTx.run(action)"] --> WC["writeCtx(onPhase)<br/>WalletProvider"]
+  WC --> Action["action(ctx)<br/>e.g. subscribe(ctx, …)"]
+  Action --> Invoke["invokeContract(ctx, …)<br/>lib/stellar.ts"]
+  Invoke --> Sign["ctx.sign(xdr)<br/>Freighter"]
+  Sign --> Submit["sendTransaction"]
+  Submit --> Confirm["getTransaction polling"]
+  Confirm --> Done["{ hash, returnValue }"]
+```
+
+1. **`useTx.run(action)`** (`hooks/useTx.ts`). It clears the previous error, sets the phase to `building`, and calls `action(writeCtx(setPhase))`. When the action resolves it stores the hash, sets the phase to `success` and returns the result. When it throws it stores the message, sets the phase to `error` and resolves to `null`.
+2. **`writeCtx(onPhase)`** (`WalletProvider`). It builds the `WriteCtx` for the connected account: `{ network, source, sign, onPhase }`. `sign` is `signWithFreighter`, and `onPhase` is `useTx`'s setter, so every phase the engine reports lands in `tx.phase`. It throws a readable error when no account is connected or Freighter is on an unknown network.
+3. **The action** (a write in `lib/contracts.ts`, such as `subscribe`). It calls `invokeContract` with the contract ID, method, arguments and the matching error table, and converts `returnValue` into whatever the caller needs.
+4. **`invokeContract(ctx, …)`** (`lib/stellar.ts`). It runs the steps below in order, reporting each one through `ctx.onPhase`.
+5. **Freighter sign.** The prepared XDR goes to `ctx.sign`, which asks the user to approve it in Freighter. A decline becomes a `WalletError` and nothing is sent.
+6. **Submit.** `sendTransaction` sends the signed envelope. `ERROR` and `TRY_AGAIN_LATER` become a `ContractError`.
+7. **Confirm.** `getTransaction` is polled every 2 seconds for up to 60 seconds. A confirmed transaction returns `{ hash, returnValue }`; a timeout throws the "Still waiting for the network to confirm" error.
+
+Because simulation runs during `building`, before `signing`, a contract rejection shows up as a message before the wallet is ever asked to sign.
+
+### Phase state machine
+
+`TxPhase` moves forward only. `useTx` starts each run at `building` and ends it at `success` or `error`.
+
+```mermaid
+stateDiagram-v2
+  [*] --> idle
+  idle --> building: run(action)
+  building --> checking: charge() only
+  checking --> building: isChargeable passes
+  checking --> error: not chargeable
+  building --> signing: simulation ok
+  building --> error: simulation rejected / build failed
+  signing --> submitting: user approves
+  signing --> error: user declines / wallet error
+  submitting --> confirming: sendTransaction accepted
+  submitting --> error: ERROR / TRY_AGAIN_LATER
+  confirming --> success: confirmed
+  confirming --> error: timeout / failed
+  success --> [*]
+  error --> [*]
+```
+
+- `idle`: no write has run yet. `useTx` reports this before the first `run`.
+- `building`: load the source account, build the transaction, simulate it, and assemble the prepared transaction.
+- `checking`: only `charge` uses it. It calls `isChargeable` on-chain first and refuses to send if the contract would refuse. No other write sets this phase.
+- `signing`: the XDR is with Freighter, waiting for the user.
+- `submitting`: the signed transaction has been sent to RPC.
+- `confirming`: polling the ledger for the result.
+- `success`: the transaction is confirmed. `tx.hash` is set and `TxProgress` shows an explorer link.
+- `error`: the write failed. `tx.error` holds a sentence safe to show, and `TxProgress` renders it with `role="alert"`.
+
+`TxProgress` renders this state. It shows the step list while in progress, a success line with an explorer link, or the error message. It accepts `withCheck` to include the `checking` step, but nothing passes `true` today.
+
 ## Trace: subscribe, from click to transaction
+=======
 
 This is the path a new contributor should be able to follow end to end.
 

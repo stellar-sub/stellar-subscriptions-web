@@ -1,19 +1,18 @@
 "use client";
 
-import { useAsync } from "@/hooks/useAsync";
-import { useWallet } from "@/hooks/useWallet";
-import { getRegistryStats } from "@/lib/contracts";
+import { useRegistryStats } from "@/hooks/useRegistryStats";
 import { formatAmount } from "@/lib/format";
 import { NETWORKS } from "@/lib/stellar";
+import { useWallet } from "@/hooks/useWallet";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Spinner } from "@/components/ui/Spinner";
 
 /** Live totals from the registry contract. */
 export function PlatformStats() {
   const { network } = useWallet();
-  const { data, error, loading, reload } = useAsync(() => getRegistryStats(network), [network]);
+  const { data, error, loading, refetch } = useRegistryStats();
 
-  if (error) return <ErrorState error={error} title="Couldn't load platform stats" onRetry={reload} />;
+  if (error) return <ErrorState error={error} title="Couldn't load platform stats" onRetry={refetch} />;
 
   const tiles = [
     { label: "Plans published", value: data?.totalPlans.toLocaleString("en-US") },

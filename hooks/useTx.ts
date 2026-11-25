@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ContractError, type WriteCtx } from "@/lib/stellar";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ContractError, explorerTxUrl, type WriteCtx } from "@/lib/stellar";
 import { useWallet } from "@/hooks/useWallet";
+import { useToast } from "@/components/ui/ToastProvider";
 import type { TxPhase, TxResult } from "@/types";
 
 export interface TxState {
@@ -20,16 +21,32 @@ const PENDING: TxPhase[] = ["checking", "building", "signing", "submitting", "co
 
 /** Drives a single on-chain write so the UI can show where it is. */
 export function useTx(): TxState {
-  const { writeCtx } = useWallet();
+  const { writeCtx, network } = useWallet();
+  const { toast } = useToast();
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Tracks the hash we've already toasted so each successful write fires once.
+  const toastedHash = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     setPhase("idle");
     setHash(null);
     setError(null);
+    toastedHash.current = null;
   }, []);
+
+  // Centralized confirmation toast for every successful write (#213)
+  useEffect(() => {
+    if (phase !== "success" || !hash) return;
+    if (toastedHash.current === hash) return;
+    toastedHash.current = hash;
+    toast({
+      tone: "success",
+      message: "Transaction confirmed",
+      href: explorerTxUrl(network, hash),
+    });
+  }, [phase, hash, network, toast]);
 
   // Register beforeunload guard while transaction is pending (#35)
   useEffect(() => {
@@ -49,6 +66,7 @@ export function useTx(): TxState {
     async <T extends TxResult>(action: (ctx: WriteCtx) => Promise<T>): Promise<T | null> => {
       setError(null);
       setHash(null);
+      toastedHash.current = null;
       setPhase("building");
       try {
         const result = await action(writeCtx(setPhase));

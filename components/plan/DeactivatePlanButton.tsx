@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTx } from '@/lib/useTx';
 import { deactivatePlan } from '@/lib/contracts';
+import { invalidatePlans } from '@/hooks/usePlans';
 import { TxProgress } from '@/components/TxProgress';
 
 interface DeactivatePlanButtonProps {
@@ -20,6 +21,7 @@ export function DeactivatePlanButton({
   const handleConfirm = async () => {
     try {
       await run(() => deactivatePlan(planId));
+      invalidatePlans();
       setIsOpen(false);
       onDeactivated?.();
     } catch {
@@ -38,6 +40,7 @@ export function DeactivatePlanButton({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
+        aria-expanded={isOpen}
         className="rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
       >
         Deactivate plan

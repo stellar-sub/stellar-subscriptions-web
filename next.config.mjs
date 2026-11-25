@@ -1,3 +1,5 @@
+import bundleAnalyzer from "@next/bundle-analyzer";
+
 /**
  * Static security headers. The Content-Security-Policy is set per request in
  * `middleware.ts` because it carries a nonce for the inline scripts.
@@ -8,6 +10,8 @@ const securityHeaders = [
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Strict-Transport-Security", value: "max-age=63072000" },
 ];
+
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "true" });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -22,4 +26,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

@@ -16,6 +16,10 @@ import type { Network, TxPhase } from "@/types";
 
 const REMEMBER_KEY = "subs.wallet.connected";
 
+export function isValidNetwork(v: unknown): v is Network {
+  return v === "testnet" || v === "mainnet";
+}
+
 /**
  * Holds the Freighter connection. While connected the app follows the
  * wallet's network, so what you see and what you sign always agree; while
@@ -115,13 +119,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setNetwork = useCallback((next: Network) => {
+    if (!isValidNetwork(next)) {
+      throw new Error(`Invalid network: ${String(next)}`);
+    }
     if (!addressRef.current) setNetworkState(next);
   }, []);
 
   const writeCtx = useCallback(
     (onPhase?: (phase: TxPhase) => void): WriteCtx => {
       const source = addressRef.current;
-      if (!source) throw new Error("Connect your Freighter wallet first.");
+      if (!source) throw new Error("Connect your wallet to continue.");
       if (!walletNetwork) {
         throw new Error("Switch Freighter to Testnet or Mainnet, then try again.");
       }

@@ -6,30 +6,62 @@
 import { maxCharges } from "@/lib/format";
 import { SubStatus, type Subscription } from "@/types";
 
+/**
+ * Whether the subscription has reached a final state.
+ *
+ * Returns `true` when the status is `Cancelled` or `Exhausted`, `false`
+ * otherwise. Assumes `status` is one of the known `SubStatus` values.
+ * Mirrors the contract's rule that a cancelled or exhausted subscription can
+ * never be charged again.
+ */
 export function isFinal(sub: Pick<Subscription, "status">): boolean {
   return sub.status === SubStatus.Cancelled || sub.status === SubStatus.Exhausted;
 }
 
-/** Cap that can still be charged in principle: 0 once cancelled or exhausted. */
+/**
+ * Cap that can still be charged in principle.
+ *
+ * Returns `totalCap - totalCharged`, or `0n` once the subscription is final
+ * (cancelled or exhausted). Assumes `totalCharged` never exceeds `totalCap`.
+ * Mirrors the contract's remaining-capacity computation, which reports zero
+ * for final subscriptions.
+ */
 export function remainingCap(sub: Subscription): bigint {
   return isFinal(sub) ? 0n : sub.totalCap - sub.totalCharged;
 }
 
-/** Whole charges the cap still has room for. */
+/**
+ * Whole charges the cap still has room for.
+ *
+ * Returns the number of full periods the remaining cap can fund, computed via
+ * `maxCharges(remainingCap, amountPerPeriod)`. Assumes `amountPerPeriod` is
+ * non-zero. Mirrors the contract's rule that only whole periods can be
+ * charged, so any leftover smaller than one period is ignored.
+ */
 export function chargesLeft(sub: Subscription): bigint {
   return maxCharges(remainingCap(sub), sub.amountPerPeriod);
 }
 
 /**
- * The most this subscription can still take from the subscriber. Every
- * charge is exactly one period's amount, so a leftover smaller than a period
- * can never be charged and is not counted.
+ * The most this subscription can still take from the subscriber.
+ *
+ * Returns `chargesLeft * amountPerPeriod`. Every charge is exactly one
+ * period's amount, so a leftover smaller than a period can never be charged
+ * and is not counted. Assumes `amountPerPeriod` is non-zero. Mirrors the
+ * contract's rule that only whole periods are chargeable.
  */
 export function remainingChargeable(sub: Subscription): bigint {
   return chargesLeft(sub) * sub.amountPerPeriod;
 }
 
-/** Ledgers until a charge is allowed; zero or negative means allowed now. */
+/**
+ * Ledgers until a charge is allowed.
+ *
+ * Returns `nextChargeLedger - currentLedger`; zero or negative means a charge
+ * is allowed now. Assumes both values are ledger sequence numbers. Mirrors the
+ * contract's rule that a charge is only permitted once `nextChargeLedger` has
+ * been reached.
+ */
 export function ledgersUntilNextCharge(sub: Subscription, currentLedger: number): number {
   return sub.nextChargeLedger - currentLedger;
 }
@@ -69,8 +101,8 @@ export function committedByToken(subs: Subscription[]): Map<string, bigint> {
   return totals;
 }
 
-/** Live subscriptions first (active, then paused), then ended ones, newest first. */
+/** Live subscriptions first (active, then paused), then ended ones, soonest charge first. */
 export function sortForDisplay(subs: Subscription[]): Subscription[] {
   const rank = (s: Subscription) => (s.status === SubStatus.Active ? 0 : s.status === SubStatus.Paused ? 1 : 2);
-  return [...subs].sort((a, b) => rank(a) - rank(b) || b.id - a.id);
+  return [...subs].sort((a, b) => rank(a) - rank(b) || a.nextChargeLedger - b.nextChargeLedger);
 }

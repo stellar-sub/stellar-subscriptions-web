@@ -82,6 +82,16 @@ function answer(contractId: string, method: string, args: unknown[]): xdr.ScVal 
     }
     case "get_by_subscriber":
       return xdr.ScVal.scvVec(SUBSCRIPTIONS.filter((s) => s.subscriber === args[0]).map(subscriptionScVal));
+    case "get_by_merchant":
+      return xdr.ScVal.scvVec(SUBSCRIPTIONS.filter((s) => s.merchant === args[0]).map(subscriptionScVal));
+    case "is_chargeable": {
+      const sub = SUBSCRIPTIONS.find((s) => BigInt(s.id) === args[0]);
+      return nativeToScVal(sub ? sub.chargeable !== false : false);
+    }
+    case "subscribe":
+      return nativeToScVal(BigInt(SUBSCRIPTIONS.length + 1), { type: "u64" });
+    case "charge":
+      return nativeToScVal(true);
     default:
       return null;
   }

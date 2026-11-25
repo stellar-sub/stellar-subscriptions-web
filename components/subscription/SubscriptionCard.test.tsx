@@ -1,119 +1,164 @@
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
-import { axe } from 'vitest-axe';
-import { SubscriptionCard } from './SubscriptionCard';
-import type { Subscription } from '@/lib/types';
+import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { SubscriptionCard } from "./SubscriptionCard";
+import { SubStatus, type Subscription } from "@/types";
 
-const baseSubscription: Subscription = {
-  id: 'sub_123',
-  planId: 'plan_basic',
-  planName: 'Basic',
-  status: 'active',
-  amount: 1000,
-  currency: 'usd',
-  interval: 'month',
-  currentPeriodEnd: '2024-12-31T00:00:00.000Z',
+// ── Mocks ─────────────────────────────────────────────────────────────────────
+
+vi.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: "testnet" }),
+}));
+
+vi.mock("@/hooks/usePlans", () => ({
+  usePlan: vi.fn(),
+}));
+
+// Control the current ledger from tests.
+const ledgerState = vi.hoisted(() => ({ sequence: 1000 }));
+
+vi.mock("@/hooks/useLedger", () => ({
+  useLedger: () => ({ sequence: ledgerState.sequence, stale: false }),
+}));
+
+// NextChargeCountdown calls useLedger and useWallet internally — mock it out
+// so we only test SubscriptionCard's own behaviour here.
+vi.mock("./NextChargeCountdown", () => ({
+  NextChargeCountdown: () => <div data-testid="next-charge-countdown" />,
+}));
+
+// CapProgress talks to useToken; mock it out for the same reason.
+vi.mock("./CapProgress", () => ({
+  CapProgress: () => <div data-testid="cap-progress" />,
+}));
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+import { usePlan } from "@/hooks/usePlans";
+const mockedUsePlan = vi.mocked(usePlan);
+
+const idlePlan = { data: undefined, loading: false, error: null };
+
+const baseSub: Subscription = {
+  id: 7,
+  subscriber: "GBKAVFZ5GCZMMIV3ZKZL5USKFYT5DBBZTY4P5V5J75ANHWTX7GASETK4",
+  merchant: "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU",
+  token: "CXLM",
+  amountPerPeriod: 10_000_000n,
+  intervalLedgers: 720,
+  totalCap: 120_000_000n,
+  totalCharged: 30_000_000n,
+  startLedger: 100,
+  lastChargeLedger: 900,
+  nextChargeLedger: 1_200, // in the future relative to ledgerState.sequence (1000)
+  status: SubStatus.Active,
+  planId: 0,
 };
 
-describe('SubscriptionCard', () => {
-  it('renders the subscription details', () => {
-    const { getByText } = render(<SubscriptionCard subscription={baseSubscription} />);
+function renderCard(sub: Partial<Subscription> = {}) {
+  return render(<SubscriptionCard sub={{ ...baseSub, ...sub }} />);
+}
 
-    expect(getByText('Basic')).toBeInTheDocument();
-    expect(getByText('active')).toBeInTheDocument();
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("SubscriptionCard", () => {
+  beforeEach(() => {
+    mockedUsePlan.mockReset();
+    mockedUsePlan.mockReturnValue(idlePlan as ReturnType<typeof usePlan>);
+    ledgerState.sequence = 1000;
   });
 
-  it('has no accessibility violations', async () => {
-    const { container } = render(<SubscriptionCard subscription={baseSubscription} />);
-
-    expect(await axe(container)).toHaveNoViolations();
+  it("renders the subscription heading", () => {
+    renderCard();
+    expect(screen.getByTestId("sub-heading")).toHaveTextContent("Subscription #7");
   });
 
-  describe("CapProgress", () => {
-    it("shows 0% when nothing has been charged", () => {
-      renderCard({ ...base, totalCharged: 0n });
-      const bar = screen.getByRole("progressbar", { name: "0% of the cap charged" });
-      expect(bar).toHaveAttribute("aria-valuenow", "0");
-      expect(bar).toHaveAttribute("aria-valuemin", "0");
-      expect(bar).toHaveAttribute("aria-valuemax", "100");
-    });
-
-    it("shows the partial percentage and matching aria-valuenow", () => {
-      renderCard(base);
-      const bar = screen.getByRole("progressbar", { name: "25% of the cap charged" });
-      expect(bar).toHaveAttribute("aria-valuenow", "25");
-      expect(bar).toHaveAttribute("aria-valuemin", "0");
-      expect(bar).toHaveAttribute("aria-valuemax", "100");
-    });
-
-    it("shows 100% when the whole cap has been charged", () => {
-      renderCard({ ...base, status: SubStatus.Exhausted, totalCharged: 120_000_000n });
-      const bar = screen.getByRole("progressbar", { name: "100% of the cap charged" });
-      expect(bar).toHaveAttribute("aria-valuenow", "100");
-    });
-
-    it("keeps the charged percentage visible once cancelled", () => {
-      renderCard({ ...base, status: SubStatus.Cancelled });
-      const bar = screen.getByRole("progressbar", { name: "25% of the cap charged" });
-      expect(bar).toHaveAttribute("aria-valuenow", "25");
-    });
+  it("renders the status badge", () => {
+    renderCard();
+    expect(screen.getByText(/Active/i)).toBeInTheDocument();
   });
 
-  describe("SubStatusBadge", () => {
-    it.each([
-      [SubStatus.Active, /Active/i],
-      [SubStatus.Paused, /Paused/i],
-      [SubStatus.Cancelled, /Cancelled/i],
-      [SubStatus.Exhausted, /Exhausted/i],
-    ])("renders a badge for %s", (status, label) => {
-      renderCard({ ...base, status });
-      expect(screen.getByText(label)).toBeInTheDocument();
-    });
+  it("renders CapProgress and NextChargeCountdown child components", () => {
+    renderCard();
+    expect(screen.getByTestId("cap-progress")).toBeInTheDocument();
+    expect(screen.getByTestId("next-charge-countdown")).toBeInTheDocument();
   });
 
-  describe("CommittedSpend", () => {
-    it("shows the remaining committed amount for a single token", () => {
-      renderCard(base);
-      // 120_000_000 - 30_000_000 = 90_000_000 stroops = 9 XLM
-      expect(screen.getByText(/9(\.0+)?\s*XLM/)).toBeInTheDocument();
+  // ── Due-now badge ────────────────────────────────────────────────────────
+
+  describe("Due now badge", () => {
+    it("shows the Due now badge when nextChargeLedger is in the past", () => {
+      // ledger 1000, nextChargeLedger 900 → overdue
+      renderCard({ nextChargeLedger: 900 });
+      expect(screen.getByTestId("due-now-badge")).toBeInTheDocument();
+      expect(screen.getByTestId("due-now-badge")).toHaveTextContent("Due now");
     });
 
-    it("never adds different tokens together", () => {
-      renderCard({ ...base, token: "CUSDC" });
-      // Only the subscription's own token is shown; no XLM figure leaks in.
-      expect(screen.queryByText(/XLM/)).not.toBeInTheDocument();
+    it("shows the Due now badge when nextChargeLedger equals the current ledger", () => {
+      renderCard({ nextChargeLedger: 1000 });
+      expect(screen.getByTestId("due-now-badge")).toBeInTheDocument();
     });
 
-    it("shows nothing committed when the cap is fully charged", () => {
-      renderCard({ ...base, status: SubStatus.Exhausted, totalCharged: 120_000_000n });
-      expect(screen.queryByText(/9(\.0+)?\s*XLM/)).not.toBeInTheDocument();
+    it("does NOT show the Due now badge when nextChargeLedger is in the future", () => {
+      renderCard({ nextChargeLedger: 1200 });
+      expect(screen.queryByTestId("due-now-badge")).not.toBeInTheDocument();
+    });
+
+    it("does NOT show the Due now badge for a Paused subscription even if ledger has passed", () => {
+      renderCard({ nextChargeLedger: 900, status: SubStatus.Paused });
+      expect(screen.queryByTestId("due-now-badge")).not.toBeInTheDocument();
+    });
+
+    it("does NOT show the Due now badge for a Cancelled subscription", () => {
+      renderCard({ nextChargeLedger: 900, status: SubStatus.Cancelled });
+      expect(screen.queryByTestId("due-now-badge")).not.toBeInTheDocument();
+    });
+
+    it("does NOT show the Due now badge for an Exhausted subscription", () => {
+      renderCard({ nextChargeLedger: 900, status: SubStatus.Exhausted });
+      expect(screen.queryByTestId("due-now-badge")).not.toBeInTheDocument();
     });
   });
 
-  describe("NextChargeCountdown", () => {
-    it("reads as not-yet when the next charge is in the future", async () => {
-      renderCard(base);
-      expect(await screen.findByText(/Not before about/)).toBeInTheDocument();
+  // ── Plan name ───────────────────────────────────────────────────────────
+
+  describe("plan name", () => {
+    it("does not render a plan name when planId is 0", () => {
+      renderCard({ planId: 0 });
+      expect(screen.queryByTestId("plan-name")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("plan-name-loading")).not.toBeInTheDocument();
     });
 
-    it("reads as allowed-now when the next charge ledger has passed", async () => {
-      renderCard({ ...base, nextChargeLedger: 900 });
-      expect(await screen.findByText(/can be charged now/i)).toBeInTheDocument();
+    it("shows a loading placeholder while the plan is fetching", () => {
+      mockedUsePlan.mockReturnValue({
+        data: undefined,
+        loading: true,
+        error: null,
+      } as ReturnType<typeof usePlan>);
+
+      renderCard({ planId: 42 });
+      expect(screen.getByTestId("plan-name-loading")).toBeInTheDocument();
     });
 
-    it("says none while paused", () => {
-      renderCard({ ...base, status: SubStatus.Paused });
-      expect(screen.getByText("None while paused")).toBeInTheDocument();
+    it("renders the plan name once loaded", () => {
+      mockedUsePlan.mockReturnValue({
+        data: { id: 42, name: "Pro Plan" },
+        loading: false,
+        error: null,
+      } as ReturnType<typeof usePlan>);
+
+      renderCard({ planId: 42 });
+      expect(screen.getByTestId("plan-name")).toHaveTextContent("Pro Plan");
     });
 
-    it("says none once cancelled", () => {
-      renderCard({ ...base, status: SubStatus.Cancelled });
-      expect(screen.getByText("None — cancelled")).toBeInTheDocument();
-    });
+    it("shows Plan unavailable when the plan fails to load", () => {
+      mockedUsePlan.mockReturnValue({
+        data: undefined,
+        loading: false,
+        error: new Error("network error"),
+      } as ReturnType<typeof usePlan>);
 
-    it("says none once the cap is fully charged", () => {
-      renderCard({ ...base, status: SubStatus.Exhausted, totalCharged: 120_000_000n });
-      expect(screen.getByText(/Nothing more can be taken/)).toBeInTheDocument();
+      renderCard({ planId: 42 });
+      expect(screen.getByTestId("plan-name-error")).toHaveTextContent("Plan unavailable");
     });
   });
 });

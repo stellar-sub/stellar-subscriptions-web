@@ -38,6 +38,11 @@ const SECTIONS = [
       "Only you, the subscriber, can pause, resume or cancel a subscription. While it is paused, no charge can happen. Resume it to allow charges again.",
       "Cancelling is permanent for charges: once you cancel, no further charges can ever happen on that subscription.",
     ],
+    link: {
+      href: "/docs/subscription-lifecycle.md",
+      label: "Read the full subscription lifecycle",
+      text: "See every subscription status, what causes each transition, which are reversible, and what happens to funds in each state.",
+    },
   },
   {
     id: "failed-charge",
@@ -84,6 +89,15 @@ export default function HelpPage() {
               {paragraph}
             </p>
           ))}
+          {section.link ? (
+            <p className="text-sm text-muted">
+              {section.link.text}{" "}
+              <Link href={section.link.href} className="text-brand hover:underline">
+                {section.link.label}
+              </Link>
+              .
+            </p>
+          ) : null}
         </section>
       ))}
 
@@ -109,6 +123,31 @@ export default function HelpPage() {
             ))}
           </ul>
         </div>
+
+        <p className="text-sm text-muted">
+          Running a plan yourself? The{" "}
+          <a
+            href="https://github.com/your-org/subscription-dapp/blob/main/docs/merchant-guide.md"
+            className="text-brand hover:underline"
+          >
+            merchant guide
+          </a>{" "}
+          walks through the full workflow: creating a plan, sharing the link, monitoring subscribers, charging and
+          deactivating.
+        </p>
+      </section>
+
+      <section id="tokens" aria-labelledby="tokens-heading" className="space-y-3">
+        <h2 id="tokens-heading" className="text-lg font-semibold text-fg">
+          Which tokens plans can use
+        </h2>
+        <p className="text-sm text-muted">
+          Plans can be priced in any SEP-41 token, including native XLM through its Stellar Asset Contract. Read{" "}
+          <Link href="/docs/token-support.md" className="text-brand hover:underline">
+            token support
+          </Link>{" "}
+          to learn what is accepted and how to find a token&apos;s contract id.
+        </p>
       </section>
 
       <p className="text-sm text-muted">

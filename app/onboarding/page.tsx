@@ -2,7 +2,27 @@
 
 import Link from "next/link";
 
+const FREIGHTER_URL = "https://freighter.app";
+const CHROME_STORE_URL =
+  "https://chromewebstore.google.com/detail/freighter/bcacfldlkkdogcmkkibnjlakofdplcbk";
+const FIREFOX_STORE_URL = "https://addons.mozilla.org/en-US/firefox/addon/freighter/";
+
+export function getFreighterInstallUrl(userAgent: string): string {
+  if (/firefox/i.test(userAgent)) {
+    return FIREFOX_STORE_URL;
+  }
+  if (/chrome|chromium|crios|edg|brave|opr/i.test(userAgent)) {
+    return CHROME_STORE_URL;
+  }
+  return FREIGHTER_URL;
+}
+
 export default function OnboardingPage() {
+  const installUrl =
+    typeof navigator !== "undefined"
+      ? getFreighterInstallUrl(navigator.userAgent)
+      : FREIGHTER_URL;
+
   return (
     <main className="mx-auto max-w-2xl space-y-8 px-4 py-8">
       <div className="space-y-4">
@@ -19,7 +39,7 @@ export default function OnboardingPage() {
           Freighter is a browser extension that makes it safe to interact with Stellar apps.
           It keeps your private keys secure in your browser, not on our servers.
         </p>
-        <a href="https://freighter.app" target="_blank" rel="noreferrer" className="btn-primary inline-block">
+        <a href={installUrl} target="_blank" rel="noreferrer" className="btn-primary inline-block">
           Install Freighter
         </a>
       </div>

@@ -1,13 +1,12 @@
 'use client';
 
 import { useCallback } from 'react';
-import RequireWallet from '@/components/RequireWallet';
-import LoadingBlock from '@/components/LoadingBlock';
-import ErrorState from '@/components/ErrorState';
-import EmptyState from '@/components/EmptyState';
-import SubscriberTable from '@/components/SubscriberTable';
-import ChargeAllButton from '@/components/ChargeAllButton';
-import { useMerchantSubscriptions } from '@/hooks/useMerchantSubscriptions';
+import RequireWallet from '@/components/wallet/RequireWallet';
+import ErrorState from '@/components/ui/ErrorState';
+import EmptyState from '@/components/ui/EmptyState';
+import SubscriberTable from '@/components/merchant/SubscriberTable';
+import ChargeAllButton from '@/components/merchant/ChargeAllButton';
+import { useMerchantSubscriptions } from '@/hooks/useSubscriptions';
 
 function MerchantSubscriptionsContent({ address }: { address: string }) {
   const { subscriptions, loading, error, reload } = useMerchantSubscriptions(address);
@@ -17,7 +16,7 @@ function MerchantSubscriptionsContent({ address }: { address: string }) {
   }, [reload]);
 
   if (loading) {
-    return <LoadingBlock label="Loading your subscribers..." />;
+    return <div className="p-8 text-center text-muted">Loading your subscribers…</div>;
   }
 
   if (error) {

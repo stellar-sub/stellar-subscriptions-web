@@ -8,6 +8,8 @@ export interface AsyncState<T> {
   loading: boolean;
   /** Run the loader again, keeping current data on screen meanwhile. */
   reload: () => void;
+  /** Manually re-trigger the loader without changing the caller's deps. */
+  refetch: () => void;
 }
 
 interface CacheEntry {
@@ -57,6 +59,7 @@ export function useAsync<T>(
   const [generation, setGeneration] = useState(0);
 
   const reload = useCallback(() => setGeneration((g) => g + 1), []);
+  const refetch = useCallback(() => setGeneration((g) => g + 1), []);
 
   // Keep the latest cache key in a ref so the effect can read it without
   // re-running when only the key changes identity.
@@ -107,5 +110,5 @@ export function useAsync<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `load` is recreated every render; `deps` says when it actually changes.
   }, [...deps, generation, load === null]);
 
-  return { data, error, loading, reload };
+  return { data, error, loading, reload, refetch };
 }

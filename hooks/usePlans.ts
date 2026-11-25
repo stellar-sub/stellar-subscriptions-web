@@ -62,7 +62,23 @@ function fetchPlanOnce(network: string, id: number): Promise<unknown> {
   return request;
 }
 
-/** Drop cached plan reads; call after any plan write. */
+/**
+ * Drop every cached plan read and any in-flight plan request.
+ *
+ * Invalidation contract: any write that creates or deactivates a plan MUST
+ * call this afterwards, otherwise `PLAN_CACHE` keeps serving the pre-write
+ * data (active lists, merchant lists and plan details) until the TTL expires.
+ * Callers include:
+ * - `createPlan` — a new plan must appear in active/merchant lists.
+ * - `deactivatePlan` — a deactivated plan must disappear from active lists
+ *   and its detail entry must reflect the new state.
+ * - Any other plan-creating or plan-deactivating write (e.g. batch or admin
+ *   helpers) — treat this list as the minimum, not the whole set.
+ *
+ * Clears both `PLAN_CACHE` (resolved entries) and `PLAN_INFLIGHT` (pending
+ * requests), so a refresh started before the write cannot repopulate the
+ * cache with stale data.
+ */
 export function invalidatePlans(): void {
   PLAN_CACHE.clear();
   PLAN_INFLIGHT.clear();

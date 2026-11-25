@@ -40,4 +40,24 @@ describe("AuthorizationSummary", () => {
     const { container } = summary(120_000_000n);
     expect(container).toHaveTextContent("enforced by the subscription contract, not by this website");
   });
+
+  it("handles an exhausted subscription with a single charge", () => {
+    const { container } = summary(10_000_000n);
+    expect(container).toHaveTextContent("at most 1 charge");
+    expect(container).not.toHaveTextContent("cap is used up after");
+  });
+
+  it("still states the cap and charge count for a paused subscription", () => {
+    const { container } = summary(120_000_000n);
+    expect(screen.getByText("After you cancel, no further charges can occur.")).toBeInTheDocument();
+    expect(container).toHaveTextContent("Never more than 12 XLM in total");
+    expect(container).toHaveTextContent("at most 12 charges");
+  });
+
+  it("handles a cap that allows zero charges", () => {
+    const { container } = summary(5_000_000n);
+    expect(container).toHaveTextContent("at most 0 charges");
+    expect(container).toHaveTextContent("The last 0.5 XLM of the cap can never be charged");
+    expect(container).not.toHaveTextContent("cap is used up after");
+  });
 });

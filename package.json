@@ -5,42 +5,51 @@
   "description": "Recurring payments on Stellar: merchants publish plans and charge on schedule; subscribers authorize a capped subscription they can pause or cancel at any time.",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run validate:env && next build",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "validate:env": "tsx scripts/validate-env.ts",
+    "analyze": "ANALYZE=true next build",
+    "check:licenses": "license-checker --failOn GPL-2.0 --failOn GPL-3.0 --failOn LGPL-2.0"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
-    "@stellar/stellar-sdk": "^17.1.0",
+    "@stellar/stellar-sdk": "^17.4.0",
+    "@testing-library/dom": "^10.4.2",
     "date-fns": "^4.4.0",
+    "msw": "^2.15.0",
     "next": "14.2.35",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "vitest-axe": "^0.1.0"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "^6.6.3",
+    "@next/bundle-analyzer": "^14.2.35",
+    "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
+    "@testing-library/user-event": "^14.6.13",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.6.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
     "fast-check": "^3.23.2",
     "jsdom": "^25.0.1",
-    "postcss": "^8.4.49",
-    "prettier": "^3.9.10",
+    "license-checker": "^25.0.1",
+    "postcss": "^8.5.33",
+    "prettier": "^3.10.1",
     "tailwindcss": "^3.4.17",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "tsx": "^4.19.2",
+    "typescript": "^7.0.2",
+    "vitest": "^2.1.9"
   },
   "engines": {
     "node": ">=20"

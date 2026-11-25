@@ -42,6 +42,10 @@ export function CapSelector({
             : null;
   const cap = mode === "default" ? defaultCap : customError ? null : customCap;
   const example = formatAmount(amountPerPeriod * 3n, token.decimals);
+  const valueText =
+    cap === null
+      ? undefined
+      : `${formatAmount(cap, token.decimals)} ${token.symbol} — ${pluralize(maxCharges(cap, amountPerPeriod), "charge")}`;
 
   useEffect(() => {
     onChange({ cap, error: customError });
@@ -108,6 +112,7 @@ export function CapSelector({
                   onChange={(e) => setCustom(e.target.value)}
                   placeholder={example}
                   aria-label={`Custom cap in ${token.symbol}`}
+                  aria-valuetext={valueText}
                   aria-invalid={Boolean(customError)}
                   className="input max-w-[12rem]"
                 />

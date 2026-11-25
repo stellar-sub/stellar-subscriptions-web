@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { TxProgress } from "./TxProgress";
+import { TxProgress, type TxPhase } from "./TxProgress";
 
 describe("TxProgress", () => {
   it("shows the in-progress phase with the current step", () => {
@@ -35,5 +35,27 @@ describe("TxProgress", () => {
     const link = screen.getByRole("link", { name: /explorer|view/i });
     expect(link).toHaveAttribute("href", expect.stringContaining(explorerSegment));
     expect(link).toHaveAttribute("href", expect.stringContaining("deadbeef"));
+  });
+
+  const phases: TxPhase[] = [
+    "checking",
+    "building",
+    "signing",
+    "submitting",
+    "confirming",
+    "success",
+    "error",
+  ];
+
+  it.each(phases)("matches the snapshot for the %s phase", (phase) => {
+    const { container } = render(<TxProgress phase={phase} />);
+    expect(container).toMatchSnapshot();
+  });
+
+  it("matches the snapshot for the error phase with a message", () => {
+    const { container } = render(
+      <TxProgress phase="error" error="You declined the request in Freighter." />,
+    );
+    expect(container).toMatchSnapshot();
   });
 });

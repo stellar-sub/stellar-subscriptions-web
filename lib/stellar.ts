@@ -49,6 +49,9 @@ export const NETWORKS: Record<Network, NetworkConfig> = {
 
 export const DEFAULT_NETWORK: Network = process.env.NEXT_PUBLIC_DEFAULT_NETWORK === "mainnet" ? "mainnet" : "testnet";
 
+/** Approximate seconds per ledger on Stellar. */
+export const LEDGER_SECONDS = 5;
+
 export const explorerTxUrl = (network: Network, hash: string) => `${NETWORKS[network].explorer}/tx/${hash}`;
 export const explorerAccountUrl = (network: Network, account: string) =>
   `${NETWORKS[network].explorer}/account/${account}`;
@@ -107,7 +110,17 @@ export const arg = {
 
 const RETRIES = 3;
 
-/** Public RPC nodes rate-limit bursts; retry those, never contract errors. */
+/**
+ * Run `fn`, retrying transient RPC failures with exponential back-off.
+ *
+ * Public RPC nodes rate-limit bursts, so a call is attempted at most
+ * `RETRIES` (3) times. Between attempts it waits
+ * `300ms × 2^attempt + jitter`, where jitter is up to 200ms of random delay
+ * (so roughly 300–500ms, then 600–800ms). Only transient errors are retried:
+ * HTTP 429 / rate-limit responses, timeouts, and network / fetch failures.
+ * Anything else — contract errors in particular — is rethrown immediately,
+ * as is the last transient error once the attempts are exhausted.
+ */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
   for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -128,6 +141,14 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** A Soroban contract id is a 56-character strkey starting with `C`. */
+const CONTRACT_ID_RE = /^C[A-Z2-7]{55}$/;
+
+/** True when `id` looks like a valid Soroban contract id. */
+export function isContractId(id: string): boolean {
+  return CONTRACT_ID_RE.test(id);
+}
+
 /**
  * Call a contract function read-only by simulating it. Nothing is signed or
  * submitted. Returns the decoded native value.
@@ -139,6 +160,9 @@ export async function readContract<T>(
   args: xdr.ScVal[],
   errors: ErrorTable,
 ): Promise<T> {
+  if (!isContractId(contractId)) {
+    throw new ContractError("Invalid contract id");
+  }
   const source = NETWORKS[network].readAccount;
   if (!source) {
     throw new ContractError(`Reading from ${NETWORKS[network].label} isn't configured.`);
@@ -248,6 +272,54 @@ async function confirm(server: rpc.Server, hash: string, timeoutMs = 60_000): Pr
 export async function getLatestLedger(network: Network): Promise<number> {
   const res = await withRetry(() => getServer(network).getLatestLedger());
   return res.sequence;
+}
+
+/** Events fetched per page by {@link walkEvents}. */
+export const PAGE_SIZE = 200;
+/** Upper bound on pages walked by {@link walkEvents}. */
+export const MAX_PAGES = 40;
+/** Ledgers of slack subtracted when computing an event window start. */
+export const WINDOW_MARGIN = 100;
+
+/**
+ * The ledger encoded in a paging cursor. Cursors are `toid` values: the
+ * ledger sequence shifted left by 32 bits, plus a transaction/op index.
+ */
+export function cursorLedger(cursor: string): number {
+  return Math.floor(Number(BigInt(cursor) >> 32n));
+}
+
+/**
+ * Walk a contract's events from `startLedger` forward, page by page, decoding
+ * each event with `decoder`. Stops once the cursor catches up with the latest
+ * ledger or after {@link MAX_PAGES} pages.
+ */
+export async function walkEvents<T>(
+  server: rpc.Server,
+  filters: rpc.Api.EventFilter[],
+  decoder: (event: rpc.Api.EventResponse) => T,
+  startLedger: number,
+): Promise<{ events: T[]; latestLedger: number }> {
+  const events: T[] = [];
+  let cursor: string | undefined;
+  let latestLedger = startLedger;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await withRetry(() =>
+      server.getEvents({
+        startLedger: cursor ? undefined : startLedger,
+        cursor,
+        filters,
+        limit: PAGE_SIZE,
+      }),
+    );
+    latestLedger = res.latestLedger;
+    for (const event of res.events) events.push(decoder(event));
+    if (!res.cursor || cursorLedger(res.cursor) >= res.latestLedger) break;
+    cursor = res.cursor;
+  }
+
+  return { events, latestLedger };
 }
 
 /** Oldest and latest ledger the RPC node still holds events for. */

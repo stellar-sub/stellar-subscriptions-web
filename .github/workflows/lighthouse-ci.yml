@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
@@ -25,16 +25,31 @@ jobs:
       - name: Build app
         run: npm run build
 
+      - name: Verify subscriptions page (badge-rendering) is built
+        run: |
+          set -euo pipefail
+          # The subscriptions page renders SubStatusBadge, so it must exist in the
+          # build output before Lighthouse audits it for accessibility.
+          found="$(find . -path ./node_modules -prune -o -type f \( -name 'subscriptions.html' -o -name 'subscriptions/index.html' \) -print | head -n 1)"
+          if [ -z "$found" ]; then
+            echo "::error::Subscriptions page (badge-rendering page) was not found in the build output."
+            exit 1
+          fi
+          echo "Found subscriptions page at: $found"
+
       - name: Run Lighthouse CI
         run: |
           npm install -g @lhci/cli@0.14.x
           lhci autorun
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+          # Ensure lhci serves the freshly built app (including the subscriptions
+          # page) before auditing. Override via lighthouserc if a custom server is used.
+          LHCI_BUILD_CONTEXT__CURRENT_BRANCH: ${{ github.head_ref || github.ref_name }}
 
       - name: Upload Lighthouse results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: lighthouse-results
           path: .lighthouseci

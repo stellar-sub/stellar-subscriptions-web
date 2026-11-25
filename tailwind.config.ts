@@ -37,6 +37,19 @@ const config: Config = {
       //   warn      on surface  4.5:1  (dark: 4.7:1)
       //   danger    on surface  4.6:1  (dark: 4.9:1)
       //   line      on surface  3.1:1  (dark: 3.2:1) — UI boundary, AA non-text
+      //
+      // SubStatusBadge pairs (issue #235). The badge renders its status colour
+      // as text on the `raised` surface, so each combination must clear 4.5:1
+      // in both themes. Measured values:
+      //
+      //   ok        on raised   4.6:1  (dark: 4.8:1)  — Active
+      //   warn      on raised   4.5:1  (dark: 4.7:1)  — Paused
+      //   muted     on raised   5.7:1  (dark: 5.0:1)  — Cancelled / Exhausted
+      //   danger    on raised   4.6:1  (dark: 4.9:1)  — Cancelled (error)
+      //
+      // `warn` sits exactly on the AA boundary in the light theme, so it is
+      // darkened slightly to leave headroom for anti-aliasing and rounding.
+      // The corresponding `--warn` RGB values live in `app/globals.css`.
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],

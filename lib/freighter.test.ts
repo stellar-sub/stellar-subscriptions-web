@@ -15,6 +15,7 @@ import {
   getFreighterNetwork,
   signWithFreighter,
 } from './freighter';
+import { ContractError } from './errors';
 
 const mocked = vi.mocked(freighterApi);
 
@@ -90,6 +91,19 @@ describe('lib/freighter', () => {
 
       await expect(signWithFreighter('XDR', 'PUBLIC')).rejects.toThrow(
         /nothing was signed/i,
+      );
+    });
+
+    it('throws a ContractError when Freighter returns invalid XDR', async () => {
+      mocked.signTransaction.mockResolvedValue({
+        signedTxXdr: 'CORRUPT_XDR_NOT_VALID',
+      } as never);
+
+      const promise = signWithFreighter('XDR', 'PUBLIC');
+
+      await expect(promise).rejects.toBeInstanceOf(ContractError);
+      await expect(promise).rejects.toThrow(
+        'Freighter returned invalid XDR — do not retry',
       );
     });
   });
