@@ -36,7 +36,8 @@ import {
   signTransaction,
   WatchWalletChanges,
 } from "@stellar/freighter-api";
-import { Networks } from "@stellar/stellar-sdk";
+import { Networks, TransactionBuilder } from "@stellar/stellar-sdk";
+import { ContractError } from "@/lib/errors";
 import type { Network } from "@/types";
 
 export class WalletError extends Error {
@@ -119,6 +120,11 @@ export async function signWithFreighter(xdr: string, networkPassphrase: string, 
   const res = await signTransaction(xdr, { networkPassphrase, address });
   if (res.error) throw new WalletError(walletMessage(res.error, "Freighter couldn't sign."));
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");
+  try {
+    TransactionBuilder.fromXDR(res.signedTxXdr, networkPassphrase);
+  } catch {
+    throw new ContractError("Freighter returned invalid XDR — do not retry");
+  }
   return res.signedTxXdr;
 }
 
